@@ -65,6 +65,27 @@ Supported function actions:
 - `createJob`: create a BYOK generation task.
 - `getJob`: fetch task status/result.
 - `adminJobs`: list recent tasks when `ADMIN_TOKEN` is configured.
+- `initDatabase`: create production indexes when `ADMIN_TOKEN` is configured.
+
+Laf database collections:
+
+- `paperbanana_jobs`: task metadata, prompts, provider/model choices, status, logs, and image references.
+- `paperbanana_images`: generated image bodies only when object storage is unavailable.
+- `paperbanana_events`: lightweight usage events for later product analytics.
+
+Run database initialization after setting `ADMIN_TOKEN`:
+
+```bash
+curl -X POST https://sdswgya641.sealoshzh.site/paperbanana-api \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"initDatabase","adminToken":"YOUR_ADMIN_TOKEN"}'
+```
+
+The initializer creates these indexes:
+
+- `paperbanana_jobs`: `createdAt_desc`, `status_updatedAt_desc`, `provider_createdAt_desc`.
+- `paperbanana_images`: `job_candidate`, `createdAt_desc`.
+- `paperbanana_events`: `createdAt_desc`, `type_createdAt_desc`, `provider_createdAt_desc`.
 
 Supported BYOK providers:
 
@@ -80,7 +101,7 @@ Laf environment variables:
 - `PAPERBANANA_MAX_CANDIDATES`: default `3`.
 - `PAPERBANANA_MAX_CRITIC_ROUNDS`: default `2`.
 
-If the configured bucket is missing or not writable, images fall back to database `data:` URLs so the result is still saved. For production, create a Laf storage bucket and set `PAPERBANANA_BUCKET` to avoid large image blobs in MongoDB records.
+If the configured bucket is missing or not writable, images fall back to `paperbanana_images` so the result is still saved. `paperbanana_jobs` stores only image references, and `getJob` hydrates the image data for the task owner. For production, create a Laf storage bucket and set `PAPERBANANA_BUCKET` to avoid large image blobs in MongoDB.
 
 ## Sealos Container Deployment
 

@@ -35,14 +35,21 @@ type AdminJobsBody = {
   limit?: number
 }
 
+type InitDatabaseBody = {
+  action: 'initDatabase'
+  adminToken: string
+}
+
 type HealthBody = {
   action: 'health'
 }
 
-type RequestBody = CreateJobBody | GetJobBody | AdminJobsBody | HealthBody
+type RequestBody = CreateJobBody | GetJobBody | AdminJobsBody | InitDatabaseBody | HealthBody
 
 const db = cloud.mongo.db
 const jobs = db.collection('paperbanana_jobs')
+const images = db.collection('paperbanana_images')
+const events = db.collection('paperbanana_events')
 const bucketName = process.env.PAPERBANANA_BUCKET || 'paperbanana'
 
 export default async function (ctx: FunctionContext) {
@@ -57,7 +64,7 @@ export default async function (ctx: FunctionContext) {
 
   try {
     if (action === 'health') {
-      return ok({ ok: true, runtime: 'laf', version: '0.1.1' })
+      return ok({ ok: true, runtime: 'laf', version: '0.1.2', bucketName })
     }
     if (action === 'createJob') {
       return await createJob(body as CreateJobBody, ctx)
@@ -67,6 +74,9 @@ export default async function (ctx: FunctionContext) {
     }
     if (action === 'adminJobs') {
       return await adminJobs(body as AdminJobsBody)
+    }
+    if (action === 'initDatabase') {
+      return await initDatabase(body as InitDatabaseBody)
     }
     return fail(`Unknown action: ${action}`, 400)
   } catch (error: any) {
@@ -118,6 +128,18 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
   }
 
   await jobs.insertOne(record)
+  await recordEvent('job_created', {
+    jobId,
+    provider: body.provider,
+    mainModelName: body.mainModelName,
+    imageModelName: body.imageModelName,
+    pipelineMode: record.pipelineMode,
+    aspectRatio: record.aspectRatio,
+    numCandidates: safeNumCandidates,
+    promptCharCount: record.promptCharCount,
+    clientIp: record.clientIp,
+    userAgent: record.userAgent,
+  })
 
   // Laf 云函数是常驻 Node.js Runtime。API key 只保留在本次闭包中，
   // 不写入数据库，不进入日志。
@@ -132,16 +154,43 @@ async function getJob(jobId: string) {
   if (!jobId) return fail('jobId is required', 400)
   const job = await jobs.findOne({ _id: jobId })
   if (!job) return fail('Job not found', 404)
-  return ok({ job: publicJob(job) })
+  return ok({ job: await publicJob(job, { includeImageData: true }) })
 }
 
 async function adminJobs(body: AdminJobsBody) {
-  const expected = process.env.ADMIN_TOKEN || ''
-  if (!expected) return fail('Admin API disabled: ADMIN_TOKEN is not configured', 503)
-  if (body.adminToken !== expected) return fail('Invalid admin token', 401)
+  const authError = requireAdmin(body.adminToken)
+  if (authError) return authError
   const limit = clamp(Number(body.limit || 50), 1, 200)
   const list = await jobs.find({}).sort({ createdAt: -1 }).limit(limit).toArray()
-  return ok({ jobs: list.map(publicJob) })
+  const publicJobs = await Promise.all(list.map((job: any) => publicJob(job, { includeImageData: false })))
+  return ok({ jobs: publicJobs })
+}
+
+async function initDatabase(body: InitDatabaseBody) {
+  const authError = requireAdmin(body.adminToken)
+  if (authError) return authError
+
+  const indexResults = await Promise.all([
+    createIndex(jobs, 'paperbanana_jobs', { createdAt: -1 }, { name: 'createdAt_desc' }),
+    createIndex(jobs, 'paperbanana_jobs', { status: 1, updatedAt: -1 }, { name: 'status_updatedAt_desc' }),
+    createIndex(jobs, 'paperbanana_jobs', { provider: 1, createdAt: -1 }, { name: 'provider_createdAt_desc' }),
+    createIndex(images, 'paperbanana_images', { jobId: 1, candidateId: 1 }, { name: 'job_candidate' }),
+    createIndex(images, 'paperbanana_images', { createdAt: -1 }, { name: 'createdAt_desc' }),
+    createIndex(events, 'paperbanana_events', { createdAt: -1 }, { name: 'createdAt_desc' }),
+    createIndex(events, 'paperbanana_events', { type: 1, createdAt: -1 }, { name: 'type_createdAt_desc' }),
+    createIndex(events, 'paperbanana_events', { provider: 1, createdAt: -1 }, { name: 'provider_createdAt_desc' }),
+  ])
+
+  return ok({
+    ok: indexResults.every((item) => item.ok),
+    collections: ['paperbanana_jobs', 'paperbanana_images', 'paperbanana_events'],
+    indexes: indexResults,
+    storage: {
+      bucketName,
+      bucketPreferred: true,
+      databaseImageFallback: true,
+    },
+  })
 }
 
 async function runJob(
@@ -164,9 +213,14 @@ async function runJob(
     results.push({
       candidateId: i,
       url: saved.url,
+      imageId: saved.imageId,
+      objectKey: saved.objectKey,
+      bucketName: saved.bucketName,
       storage: saved.storage,
+      bytes: saved.bytes,
       mimeType: image.mimeType,
       description: image.description,
+      storageError: saved.storageError,
     })
   }
 
@@ -181,6 +235,15 @@ async function runJob(
       },
     },
   )
+
+  await recordEvent('job_succeeded', {
+    jobId,
+    provider: body.provider,
+    mainModelName: body.mainModelName,
+    imageModelName: body.imageModelName,
+    numCandidates,
+    resultImageCount: results.length,
+  })
 }
 
 async function runCandidate(body: CreateJobBody, apiKey: string, maxCriticRounds: number) {
@@ -404,23 +467,50 @@ async function fetchImageAsBase64(url: string) {
 
 async function saveImage(jobId: string, candidateId: number, base64: string, mimeType: string) {
   const filename = `${jobId}/candidate-${candidateId}.png`
+  const bytes = Buffer.byteLength(base64, 'base64')
   try {
     const bucket = cloud.storage.bucket(bucketName)
     await bucket.writeFile(filename, Buffer.from(base64, 'base64'), { ContentType: mimeType })
     return {
       storage: 'bucket',
+      imageId: '',
+      objectKey: filename,
+      bucketName,
+      bytes,
       url: await bucket.getDownloadUrl(filename, 3600 * 24 * 7),
+      storageError: '',
     }
   } catch (error: any) {
+    const imageId = `${jobId}-${candidateId}`
+    await images.updateOne(
+      { _id: imageId },
+      {
+        $set: {
+          jobId,
+          candidateId,
+          mimeType,
+          base64,
+          bytes,
+          storageError: error?.message || String(error),
+          createdAt: new Date(),
+        },
+      },
+      { upsert: true },
+    )
     return {
-      storage: 'database-data-url',
-      url: `data:${mimeType};base64,${base64}`,
+      storage: 'database-image-doc',
+      imageId,
+      objectKey: '',
+      bucketName: '',
+      bytes,
+      url: '',
       storageError: error?.message || String(error),
     }
   }
 }
 
 async function markFailed(jobId: string, error: string) {
+  const existing = await jobs.findOne({ _id: jobId })
   await jobs.updateOne(
     { _id: jobId },
     {
@@ -433,6 +523,13 @@ async function markFailed(jobId: string, error: string) {
       $push: { logs: `ERROR: ${error}` },
     },
   )
+  await recordEvent('job_failed', {
+    jobId,
+    provider: existing?.provider || '',
+    mainModelName: existing?.mainModelName || '',
+    imageModelName: existing?.imageModelName || '',
+    error,
+  })
 }
 
 async function appendLog(jobId: string, message: string) {
@@ -540,7 +637,12 @@ function selectApiKey(provider: Provider, apiKeys: ApiKeys) {
   return ''
 }
 
-function publicJob(job: any) {
+type PublicJobOptions = {
+  includeImageData: boolean
+}
+
+async function publicJob(job: any, options: PublicJobOptions) {
+  const resultImages = await publicResultImages(job.resultImages || [], options)
   return {
     id: job._id,
     status: job.status,
@@ -554,13 +656,99 @@ function publicJob(job: any) {
     numCandidates: job.numCandidates,
     maxCriticRounds: job.maxCriticRounds,
     promptCharCount: job.promptCharCount,
-    resultImages: job.resultImages || [],
+    resultImageCount: (job.resultImages || []).length,
+    resultImages,
     logs: job.logs || [],
     error: job.error || '',
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
     startedAt: job.startedAt,
     completedAt: job.completedAt,
+  }
+}
+
+async function publicResultImages(resultImages: any[], options: PublicJobOptions) {
+  return Promise.all(resultImages.map(async (image, index) => {
+    const publicImage = {
+      candidateId: image.candidateId ?? image.candidate_id ?? index,
+      filename: imageFilename(image, index),
+      url: shouldExposeStoredUrl(image.url, options) ? image.url : '',
+      imageId: image.imageId || '',
+      objectKey: image.objectKey || '',
+      storage: image.storage || '',
+      bytes: image.bytes || 0,
+      mimeType: image.mimeType || image.mime_type || '',
+      description: image.description || '',
+      storageError: image.storageError || '',
+    }
+
+    if (!options.includeImageData) return publicImage
+
+    if (publicImage.storage === 'database-image-doc' && publicImage.imageId && !publicImage.url) {
+      const imageDoc = await images.findOne({ _id: publicImage.imageId })
+      if (imageDoc?.base64) {
+        publicImage.url = `data:${imageDoc.mimeType || publicImage.mimeType || 'image/png'};base64,${imageDoc.base64}`
+      }
+    }
+
+    if (publicImage.storage === 'bucket' && publicImage.objectKey) {
+      try {
+        const bucket = cloud.storage.bucket(image.bucketName || bucketName)
+        publicImage.url = await bucket.getDownloadUrl(publicImage.objectKey, 3600 * 24 * 7)
+      } catch {
+        // Keep the stored URL if a fresh signed URL cannot be generated.
+      }
+    }
+
+    return publicImage
+  }))
+}
+
+function imageFilename(image: any, index: number) {
+  if (image.objectKey) return image.objectKey
+  if (image.filename) return image.filename
+  if (image.imageId) return image.imageId
+  if (typeof image.url === 'string' && image.url && !image.url.startsWith('data:')) return image.url
+  return `${index}`
+}
+
+function shouldExposeStoredUrl(url: string, options: PublicJobOptions) {
+  if (!url) return false
+  if (url.startsWith('data:')) return options.includeImageData
+  return true
+}
+
+function requireAdmin(adminToken: string) {
+  const expected = process.env.ADMIN_TOKEN || ''
+  if (!expected) return fail('Admin API disabled: ADMIN_TOKEN is not configured', 503)
+  if (adminToken !== expected) return fail('Invalid admin token', 401)
+  return null
+}
+
+async function createIndex(collection: any, collectionName: string, keys: any, options: any) {
+  try {
+    const name = await collection.createIndex(keys, options)
+    return { ok: true, collection: collectionName, name, keys }
+  } catch (error: any) {
+    return {
+      ok: false,
+      collection: collectionName,
+      name: options?.name || '',
+      keys,
+      error: error?.message || String(error),
+    }
+  }
+}
+
+async function recordEvent(type: string, payload: any) {
+  try {
+    await events.insertOne({
+      type,
+      ...payload,
+      createdAt: new Date(),
+    })
+  } catch {
+    // Event logging should never block user-facing generation.
   }
 }
 
