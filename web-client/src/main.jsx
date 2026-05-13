@@ -45,14 +45,21 @@ const PROVIDERS = {
   },
 };
 
-const SAMPLE_METHOD = `We propose a retrieval-augmented multi-agent framework for academic illustration. A retriever first selects relevant reference figures. A planner turns the method section and figure caption into a detailed visual specification. A style agent enriches the specification with publication-ready layout and color guidance. A visualizer renders candidate diagrams, and a critic iteratively checks semantic alignment and readability.`;
+const SAMPLE_METHOD = `我们提出一个用于学术图示生成的检索增强多智能体框架。检索器会先从参考库中选择相关图例，规划器再把论文方法部分和目标图注转换为详细的视觉规格。风格智能体会补充适合论文发表的版式与配色建议，生成器据此渲染多张候选图，评审器则迭代检查语义一致性与可读性。`;
+
+const STATUS_LABELS = {
+  queued: '排队中',
+  running: '生成中',
+  succeeded: '已完成',
+  failed: '失败',
+};
 
 function App() {
   const [apiBase, setApiBase] = useState(API_BASE_DEFAULT);
   const [provider, setProvider] = useState('openrouter');
   const [apiKeys, setApiKeys] = useState({ openrouter: '', gemini: '', openai: '' });
   const [methodContent, setMethodContent] = useState(SAMPLE_METHOD);
-  const [caption, setCaption] = useState('Figure 1: Overview of the proposed multi-agent academic illustration framework.');
+  const [caption, setCaption] = useState('图 1：所提出的多智能体学术图示生成框架总览。');
   const [mainModelName, setMainModelName] = useState(PROVIDERS.openrouter.mainModel);
   const [imageGenModelName, setImageGenModelName] = useState(PROVIDERS.openrouter.imageModel);
   const [pipelineMode, setPipelineMode] = useState('demo_planner_critic');
@@ -162,18 +169,18 @@ function App() {
     <main className="app-shell">
       <header className="paper-header">
         <div className="brand">
-          <img className="brand-logo" src={logoUrl} alt="PaperBanana logo" />
+          <img className="brand-logo" src={logoUrl} alt="PaperBanana 标志" />
           <div>
-            <h1>PaperBanana Studio</h1>
+            <h1>PaperBanana 工作台</h1>
             <div className="brand-tags">
-              <span>Multi-Agent</span>
-              <span>Scientific Diagrams</span>
+              <span>多智能体</span>
+              <span>学术图示生成</span>
             </div>
           </div>
         </div>
         <div className="header-links">
           <a href="https://huggingface.co/papers/2601.23265" target="_blank" rel="noreferrer">
-            <FileText size={16} /> Paper
+            <FileText size={16} /> 论文
           </a>
           <a href="https://github.com/dwzhu-pku/PaperBanana" target="_blank" rel="noreferrer">
             <Sparkles size={16} /> GitHub
@@ -182,8 +189,8 @@ function App() {
       </header>
 
       <nav className="paper-tabs">
-        <button type="button" className="active">Generate Candidates</button>
-        <button type="button">Task History</button>
+        <button type="button" className="active">生成候选图</button>
+        <button type="button">任务记录</button>
       </nav>
 
       <section className="workspace">
@@ -191,13 +198,13 @@ function App() {
           <div className="section-head">
             <Settings2 size={20} />
             <div>
-              <h2>Settings</h2>
-              <p>Select provider, pipeline, and rendering options.</p>
+              <h2>生成设置</h2>
+              <p>选择模型接口、生成流程和图像渲染参数。</p>
             </div>
           </div>
 
           <div className="field">
-            <span>Model Provider</span>
+            <span>模型接口</span>
             <div className="segmented">
               {Object.entries(PROVIDERS).map(([id, item]) => (
                 <button
@@ -213,10 +220,10 @@ function App() {
           </div>
 
           <details className="api-keys-panel" open>
-            <summary><KeyRound size={17} /> API Keys</summary>
-            <p>You do not need all keys. Fill the key for the selected provider.</p>
+            <summary><KeyRound size={17} /> API 密钥</summary>
+            <p>不需要填写全部密钥，只填当前选中的模型接口即可。</p>
             <label className="field">
-              <span>{providerConfig.label} API Key</span>
+              <span>{providerConfig.label} API 密钥</span>
               <div className="key-input">
                 <KeyRound size={18} />
                 <input
@@ -231,45 +238,45 @@ function App() {
           </details>
 
           <label className="field">
-            <span>API Base</span>
-            <input value={apiBase} onChange={(event) => setApiBase(event.target.value)} placeholder="Leave empty for same-origin backend" />
+            <span>后端地址</span>
+            <input value={apiBase} onChange={(event) => setApiBase(event.target.value)} placeholder="留空则使用同源后端" />
           </label>
 
           <div className="settings-grid">
-            <Select label="Pipeline Mode" value={pipelineMode} onChange={setPipelineMode} options={[
-              ['demo_planner_critic', 'Planner + Critic'],
-              ['demo_full', 'Full Pipeline'],
-              ['vanilla', 'Vanilla'],
+            <Select label="生成流程" value={pipelineMode} onChange={setPipelineMode} options={[
+              ['demo_planner_critic', '规划器 + 评审器'],
+              ['demo_full', '完整流程'],
+              ['vanilla', '基础生成'],
             ]} />
-            <Select label="Retrieval Setting" value={retrievalSetting} onChange={setRetrievalSetting} options={[
-              ['none', 'None'],
-              ['auto', 'Auto'],
-              ['random', 'Random'],
-              ['manual', 'Manual'],
+            <Select label="检索设置" value={retrievalSetting} onChange={setRetrievalSetting} options={[
+              ['none', '不使用检索'],
+              ['auto', '自动检索'],
+              ['random', '随机参考'],
+              ['manual', '手动参考'],
             ]} />
-            <Select label="Aspect Ratio" value={aspectRatio} onChange={setAspectRatio} options={[
+            <Select label="画面比例" value={aspectRatio} onChange={setAspectRatio} options={[
               ['16:9', '16:9'],
               ['21:9', '21:9'],
               ['3:2', '3:2'],
               ['1:1', '1:1'],
             ]} />
             <label className="field compact">
-              <span>Candidates</span>
+              <span>候选图数量</span>
               <input type="number" min="1" max="4" value={numCandidates} onChange={(event) => setNumCandidates(event.target.value)} />
             </label>
             <label className="field compact">
-              <span>Critic 轮数</span>
+              <span>评审轮数</span>
               <input type="number" min="0" max="3" value={maxCriticRounds} onChange={(event) => setMaxCriticRounds(event.target.value)} />
             </label>
           </div>
 
           <div className="model-grid">
             <label className="field">
-              <span>Model Name</span>
+              <span>主模型名称</span>
               <input value={mainModelName} onChange={(event) => setMainModelName(event.target.value)} />
             </label>
             <label className="field">
-              <span>Image Generation Model</span>
+              <span>图像生成模型</span>
               <input value={imageGenModelName} onChange={(event) => setImageGenModelName(event.target.value)} />
             </label>
           </div>
@@ -277,34 +284,34 @@ function App() {
           {health?.mock_enabled ? (
             <label className="mock-switch">
               <input type="checkbox" checked={mock} onChange={(event) => setMock(event.target.checked)} />
-              <span>Mock 模式</span>
+              <span>模拟模式</span>
             </label>
           ) : null}
 
           <button className="primary-button" type="submit" disabled={!canSubmit}>
             {isSubmitting ? <Loader2 className="spin" size={18} /> : <Send size={18} />}
-            Generate Candidates
+            生成候选图
           </button>
-          {error ? <div className="error-line"><AlertTriangle size={16} /> {error}</div> : null}
+          {error ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(error)}</div> : null}
         </form>
 
         <section className="input-results">
           <div className="section-head">
             <FileText size={20} />
             <div>
-              <h2>Input</h2>
-              <p>Paste the method section and target figure caption.</p>
+              <h2>输入内容</h2>
+              <p>粘贴论文方法部分和目标图注。</p>
             </div>
           </div>
 
           <div className="two-col input-copy">
             <label className="field">
-              <span>Method Content</span>
+              <span>论文方法内容</span>
               <textarea value={methodContent} onChange={(event) => setMethodContent(event.target.value)} rows={12} />
             </label>
 
             <label className="field">
-              <span>Figure Caption</span>
+              <span>目标图注</span>
               <textarea value={caption} onChange={(event) => setCaption(event.target.value)} rows={12} />
             </label>
           </div>
@@ -312,8 +319,8 @@ function App() {
           <div className="section-head results-head">
             <ImageIcon size={20} />
             <div>
-              <h2>Generated Candidates</h2>
-              <p>{currentJobId ? `Task ${currentJobId}` : 'Submit a task to show generated diagrams.'}</p>
+              <h2>生成结果</h2>
+              <p>{currentJobId ? `任务编号 ${currentJobId}` : '提交任务后显示生成结果。'}</p>
             </div>
           </div>
           <JobStatus job={job} apiBase={apiBaseNormalized} />
@@ -324,15 +331,15 @@ function App() {
         <div className="section-head">
           <Eye size={20} />
           <div>
-            <h2>Admin Observability</h2>
-            <p>Use ADMIN_TOKEN to view recent jobs, model choices, and failures.</p>
+            <h2>站长观察面板</h2>
+            <p>输入 ADMIN_TOKEN 查看最近任务、模型选择和失败原因。</p>
           </div>
         </div>
         <div className="admin-controls">
           <input type="password" value={adminToken} onChange={(event) => setAdminToken(event.target.value)} placeholder="ADMIN_TOKEN" />
           <button type="button" onClick={loadAdminJobs}><RefreshCcw size={17} />刷新</button>
         </div>
-        {adminError ? <div className="error-line"><AlertTriangle size={16} /> {adminError}</div> : null}
+        {adminError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(adminError)}</div> : null}
         <div className="job-table">
           <div className="job-row head">
             <span>时间</span>
@@ -347,7 +354,7 @@ function App() {
               <span><StatusBadge status={item.status} /></span>
               <span>{item.provider}</span>
               <span title={`${item.main_model_name} / ${item.image_gen_model_name}`}>{item.main_model_name}</span>
-              <span title={item.caption}>{item.prompt_char_count} chars</span>
+              <span title={item.caption}>{item.prompt_char_count} 字</span>
             </div>
           ))}
         </div>
@@ -383,14 +390,14 @@ function JobStatus({ job, apiBase }) {
         <StatusBadge status={job.status} />
         <span>{job.provider}</span>
         <span>{job.aspect_ratio}</span>
-        <span>{job.num_candidates} candidates</span>
+        <span>{job.num_candidates} 张候选图</span>
       </div>
-      {job.error ? <div className="error-line"><AlertTriangle size={16} /> {job.error}</div> : null}
+      {job.error ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(job.error)}</div> : null}
       <div className="image-grid">
         {job.result_images.map((image) => (
           <figure key={image.filename}>
-            <img src={resolveImageUrl(apiBase, image.url)} alt={`Candidate ${image.candidate_id + 1}`} />
-            <figcaption>Candidate {image.candidate_id + 1}</figcaption>
+            <img src={resolveImageUrl(apiBase, image.url)} alt={`候选图 ${image.candidate_id + 1}`} />
+            <figcaption>候选图 {image.candidate_id + 1}</figcaption>
           </figure>
         ))}
       </div>
@@ -405,7 +412,7 @@ function JobStatus({ job, apiBase }) {
 function StatusBadge({ status }) {
   const className = `status-badge ${status}`;
   const icon = status === 'succeeded' ? <CheckCircle2 size={15} /> : status === 'failed' ? <AlertTriangle size={15} /> : <Loader2 className="spin" size={15} />;
-  return <span className={className}>{icon}{status}</span>;
+  return <span className={className}>{icon}{STATUS_LABELS[status] || status || '未知'}</span>;
 }
 
 async function fetchBackendHealth(apiBase) {
@@ -420,14 +427,14 @@ async function fetchBackendHealth(apiBase) {
   for (const candidate of candidates) {
     try {
       const data = await fetchJson(candidate.url);
-      if (candidate.mode === 'laf' && data.runtime !== 'laf') throw new Error('Not a Laf backend');
-      if (candidate.mode === 'fastapi' && !data.ok) throw new Error('Not a FastAPI backend');
+      if (candidate.mode === 'laf' && data.runtime !== 'laf') throw new Error('当前地址不是 Laf 后端');
+      if (candidate.mode === 'fastapi' && !data.ok) throw new Error('当前地址不是 FastAPI 后端');
       return { ...data, backendMode: candidate.mode };
     } catch (err) {
       lastError = err;
     }
   }
-  throw lastError || new Error('Backend is unavailable');
+  throw lastError || new Error('后端暂时不可用');
 }
 
 async function createJobRequest(apiBase, health, payload) {
@@ -567,6 +574,16 @@ async function fetchJson(url, options = {}) {
     throw new Error(data.error || data.detail || `HTTP ${res.status}`);
   }
   return data;
+}
+
+function formatErrorMessage(message) {
+  if (!message) return '';
+  if (message.includes('Missing API key')) return '缺少所选模型接口的 API 密钥。';
+  if (message.includes('ADMIN_TOKEN is not configured')) return '管理接口未启用：还没有配置 ADMIN_TOKEN。';
+  if (message.includes('Admin API disabled')) return '管理接口未启用。';
+  if (message.includes('Backend is unavailable')) return '后端暂时不可用。';
+  if (message.includes('HTTP 503')) return '服务暂时不可用，请稍后重试。';
+  return message;
 }
 
 function formatDate(value) {
