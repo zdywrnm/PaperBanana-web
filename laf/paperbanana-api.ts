@@ -64,7 +64,7 @@ export default async function (ctx: FunctionContext) {
 
   try {
     if (action === 'health') {
-      return ok({ ok: true, runtime: 'laf', version: '0.1.2', bucketName })
+      return ok({ ok: true, runtime: 'laf', version: '0.1.3', bucketName })
     }
     if (action === 'createJob') {
       return await createJob(body as CreateJobBody, ctx)
@@ -167,7 +167,7 @@ async function adminJobs(body: AdminJobsBody) {
 }
 
 async function initDatabase(body: InitDatabaseBody) {
-  const authError = requireAdmin(body.adminToken)
+  const authError = requireAdminIfConfigured(body.adminToken)
   if (authError) return authError
 
   const indexResults = await Promise.all([
@@ -185,6 +185,7 @@ async function initDatabase(body: InitDatabaseBody) {
     ok: indexResults.every((item) => item.ok),
     collections: ['paperbanana_jobs', 'paperbanana_images', 'paperbanana_events'],
     indexes: indexResults,
+    adminTokenConfigured: Boolean(process.env.ADMIN_TOKEN || ''),
     storage: {
       bucketName,
       bucketPreferred: true,
@@ -721,6 +722,13 @@ function shouldExposeStoredUrl(url: string, options: PublicJobOptions) {
 function requireAdmin(adminToken: string) {
   const expected = process.env.ADMIN_TOKEN || ''
   if (!expected) return fail('Admin API disabled: ADMIN_TOKEN is not configured', 503)
+  if (adminToken !== expected) return fail('Invalid admin token', 401)
+  return null
+}
+
+function requireAdminIfConfigured(adminToken: string) {
+  const expected = process.env.ADMIN_TOKEN || ''
+  if (!expected) return null
   if (adminToken !== expected) return fail('Invalid admin token', 401)
   return null
 }

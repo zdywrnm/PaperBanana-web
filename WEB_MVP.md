@@ -65,7 +65,7 @@ Supported function actions:
 - `createJob`: create a BYOK generation task.
 - `getJob`: fetch task status/result.
 - `adminJobs`: list recent tasks when `ADMIN_TOKEN` is configured.
-- `initDatabase`: create production indexes when `ADMIN_TOKEN` is configured.
+- `initDatabase`: create production indexes. If `ADMIN_TOKEN` is configured, the initializer also requires it.
 
 Laf database collections:
 
@@ -73,13 +73,15 @@ Laf database collections:
 - `paperbanana_images`: generated image bodies only when object storage is unavailable.
 - `paperbanana_events`: lightweight usage events for later product analytics.
 
-Run database initialization after setting `ADMIN_TOKEN`:
+Run database initialization after deployment:
 
 ```bash
 curl -X POST https://sdswgya641.sealoshzh.site/paperbanana-api \
   -H 'Content-Type: application/json' \
-  -d '{"action":"initDatabase","adminToken":"YOUR_ADMIN_TOKEN"}'
+  -d '{"action":"initDatabase","adminToken":"YOUR_ADMIN_TOKEN_IF_CONFIGURED"}'
 ```
+
+`adminJobs` still requires `ADMIN_TOKEN`; `initDatabase` can run before the admin token is configured so the database can be bootstrapped from a fresh Laf app.
 
 The initializer creates these indexes:
 
