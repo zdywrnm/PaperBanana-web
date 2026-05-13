@@ -2,7 +2,7 @@
 
 This MVP turns PaperBanana into a BYOK web app:
 
-- Customers paste their own OpenRouter, Gemini, or OpenAI API key.
+- Customers paste their own OpenRouter, Gemini, OpenAI, or Alibaba Bailian API key.
 - API keys are injected only into the isolated generation subprocess and are not stored in SQLite.
 - Task records, prompts, status, logs, and generated images are stored for product analysis.
 - Admin task listing is protected with `ADMIN_TOKEN`.
@@ -65,6 +65,13 @@ Supported function actions:
 - `createJob`: create a BYOK generation task.
 - `getJob`: fetch task status/result.
 - `adminJobs`: list recent tasks when `ADMIN_TOKEN` is configured.
+
+Supported BYOK providers:
+
+- `openrouter`: text and image through OpenRouter.
+- `gemini`: text and image through Google Gemini.
+- `openai`: text through OpenAI chat completions and image through OpenAI image generation.
+- `bailian`: text through DashScope OpenAI-compatible chat completions, image through Bailian Wanxiang.
 
 Laf environment variables:
 

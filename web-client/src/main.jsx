@@ -43,6 +43,13 @@ const PROVIDERS = {
     mainModel: 'gpt-4o',
     imageModel: 'gpt-image-1',
   },
+  bailian: {
+    label: '阿里百炼',
+    keyName: 'bailian',
+    keyPlaceholder: 'sk-...',
+    mainModel: 'qwen-plus',
+    imageModel: 'wan2.7-image',
+  },
 };
 
 const SAMPLE_METHOD = `我们提出一个用于学术图示生成的检索增强多智能体框架。检索器会先从参考库中选择相关图例，规划器再把论文方法部分和目标图注转换为详细的视觉规格。风格智能体会补充适合论文发表的版式与配色建议，生成器据此渲染多张候选图，评审器则迭代检查语义一致性与可读性。`;
@@ -57,7 +64,7 @@ const STATUS_LABELS = {
 function App() {
   const [apiBase, setApiBase] = useState(API_BASE_DEFAULT);
   const [provider, setProvider] = useState('openrouter');
-  const [apiKeys, setApiKeys] = useState({ openrouter: '', gemini: '', openai: '' });
+  const [apiKeys, setApiKeys] = useState({ openrouter: '', gemini: '', openai: '', bailian: '' });
   const [methodContent, setMethodContent] = useState(SAMPLE_METHOD);
   const [caption, setCaption] = useState('图 1：所提出的多智能体学术图示生成框架总览。');
   const [mainModelName, setMainModelName] = useState(PROVIDERS.openrouter.mainModel);

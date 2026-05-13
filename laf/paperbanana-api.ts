@@ -1,12 +1,13 @@
 import cloud from '@lafjs/cloud'
 
-type Provider = 'openrouter' | 'gemini' | 'openai'
+type Provider = 'openrouter' | 'gemini' | 'openai' | 'bailian'
 type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
 
 type ApiKeys = {
   openrouter?: string
   gemini?: string
   openai?: string
+  bailian?: string
 }
 
 type CreateJobBody = {
@@ -56,7 +57,7 @@ export default async function (ctx: FunctionContext) {
 
   try {
     if (action === 'health') {
-      return ok({ ok: true, runtime: 'laf', version: '0.1.0' })
+      return ok({ ok: true, runtime: 'laf', version: '0.1.1' })
     }
     if (action === 'createJob') {
       return await createJob(body as CreateJobBody, ctx)
@@ -232,7 +233,7 @@ async function callTextModel(provider: Provider, model: string, apiKey: string, 
   if (provider === 'gemini') {
     return callGeminiText(model, apiKey, system, user)
   }
-  const baseUrl = provider === 'openrouter' ? 'https://openrouter.ai/api/v1' : 'https://api.openai.com/v1'
+  const baseUrl = textApiBaseUrl(provider)
   const actualModel = provider === 'openrouter' ? toOpenRouterModel(model) : model
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
@@ -278,6 +279,10 @@ async function callImageModel(provider: Provider, model: string, apiKey: string,
     return callGeminiImage(model, apiKey, prompt, aspectRatio)
   }
 
+  if (provider === 'bailian') {
+    return callBailianImage(model, apiKey, prompt, aspectRatio)
+  }
+
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -302,6 +307,12 @@ async function callImageModel(provider: Provider, model: string, apiKey: string,
     return message.content.split(',', 2)[1]
   }
   throw new Error('Image model did not return image data')
+}
+
+function textApiBaseUrl(provider: Provider) {
+  if (provider === 'openrouter') return 'https://openrouter.ai/api/v1'
+  if (provider === 'bailian') return 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+  return 'https://api.openai.com/v1'
 }
 
 async function callGeminiText(model: string, apiKey: string, system: string, user: string): Promise<string> {
@@ -336,6 +347,59 @@ async function callGeminiImage(model: string, apiKey: string, prompt: string, as
     if (part.inline_data?.data) return part.inline_data.data
   }
   throw new Error('Gemini image model did not return image data')
+}
+
+async function callBailianImage(model: string, apiKey: string, prompt: string, aspectRatio: string): Promise<string> {
+  const response = await fetch('https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      input: {
+        messages: [
+          {
+            role: 'user',
+            content: [{ text: prompt }],
+          },
+        ],
+      },
+      parameters: {
+        size: bailianImageSize(aspectRatio),
+        n: 1,
+        watermark: false,
+      },
+    }),
+  })
+  const data = await parseDashScopeResponse(response)
+  const imageUrl = extractDashScopeImageUrl(data)
+  if (!imageUrl) throw new Error('阿里百炼图片模型没有返回图片地址')
+  return await fetchImageAsBase64(imageUrl)
+}
+
+function extractDashScopeImageUrl(data: any) {
+  const contents = data?.output?.choices?.[0]?.message?.content || []
+  for (const item of contents) {
+    if (item?.type === 'image' && item?.image) return item.image
+    if (item?.image) return item.image
+  }
+  return ''
+}
+
+function bailianImageSize(aspectRatio: string) {
+  if (aspectRatio === '21:9') return '1792*768'
+  if (aspectRatio === '3:2') return '1536*1024'
+  if (aspectRatio === '1:1') return '1024*1024'
+  return '1536*864'
+}
+
+async function fetchImageAsBase64(url: string) {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`下载阿里百炼生成图片失败：HTTP ${response.status}`)
+  const arrayBuffer = await response.arrayBuffer()
+  return Buffer.from(arrayBuffer).toString('base64')
 }
 
 async function saveImage(jobId: string, candidateId: number, base64: string, mimeType: string) {
@@ -395,6 +459,17 @@ async function parseModelResponse(response: Response) {
   return data
 }
 
+async function parseDashScopeResponse(response: Response) {
+  const data = await parseModelResponse(response)
+  if (data?.status_code && data.status_code !== 200) {
+    throw new Error(data?.message || data?.code || `DashScope HTTP ${data.status_code}`)
+  }
+  if (data?.code) {
+    throw new Error(data?.message || data.code)
+  }
+  return data
+}
+
 function plannerSystemPrompt() {
   return [
     'You are the Planner Agent for PaperBanana.',
@@ -450,7 +525,7 @@ function diagramPromptFromDescription(description: string) {
 }
 
 function validateCreateBody(body: CreateJobBody) {
-  if (!['openrouter', 'gemini', 'openai'].includes(body.provider)) throw new Error('Invalid provider')
+  if (!['openrouter', 'gemini', 'openai', 'bailian'].includes(body.provider)) throw new Error('Invalid provider')
   if (!body.methodContent || body.methodContent.trim().length < 20) throw new Error('methodContent is too short')
   if (!body.caption || body.caption.trim().length < 3) throw new Error('caption is required')
   if (!body.mainModelName) throw new Error('mainModelName is required')
@@ -461,6 +536,7 @@ function selectApiKey(provider: Provider, apiKeys: ApiKeys) {
   if (provider === 'openrouter') return apiKeys?.openrouter?.trim() || ''
   if (provider === 'gemini') return apiKeys?.gemini?.trim() || ''
   if (provider === 'openai') return apiKeys?.openai?.trim() || ''
+  if (provider === 'bailian') return apiKeys?.bailian?.trim() || ''
   return ''
 }
 

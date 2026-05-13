@@ -166,6 +166,8 @@ class JobRunner:
             return request.api_keys.gemini.strip()
         if request.provider == "openai":
             return request.api_keys.openai.strip()
+        if request.provider == "bailian":
+            return request.api_keys.bailian.strip()
         return ""
 
     def _subprocess_env(self, job: QueuedJob) -> dict[str, str]:
@@ -175,6 +177,7 @@ class JobRunner:
         env["OPENROUTER_API_KEY"] = ""
         env["GOOGLE_API_KEY"] = ""
         env["OPENAI_API_KEY"] = ""
+        env["DASHSCOPE_API_KEY"] = ""
         env["ANTHROPIC_API_KEY"] = ""
         if job.request.provider == "openrouter":
             env["OPENROUTER_API_KEY"] = job.selected_api_key
@@ -182,6 +185,8 @@ class JobRunner:
             env["GOOGLE_API_KEY"] = job.selected_api_key
         elif job.request.provider == "openai":
             env["OPENAI_API_KEY"] = job.selected_api_key
+        elif job.request.provider == "bailian":
+            env["DASHSCOPE_API_KEY"] = job.selected_api_key
         return env
 
     def _is_safe_result_file(self, output_dir: Path, filename: str) -> bool:

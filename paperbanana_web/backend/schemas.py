@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 
-Provider = Literal["openrouter", "gemini", "openai"]
+Provider = Literal["openrouter", "gemini", "openai", "bailian"]
 TaskName = Literal["diagram", "plot"]
 PipelineMode = Literal["demo_full", "demo_planner_critic", "vanilla"]
 RetrievalSetting = Literal["auto", "manual", "random", "none"]
@@ -16,6 +16,7 @@ class ApiKeys(BaseModel):
     openrouter: str = ""
     gemini: str = ""
     openai: str = ""
+    bailian: str = ""
 
 
 class GenerateJobRequest(BaseModel):
