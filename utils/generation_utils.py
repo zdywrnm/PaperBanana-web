@@ -37,10 +37,11 @@ import os
 import yaml
 from pathlib import Path
 
-# Load config
+# Load config. The website backend can disable this so customer BYOK jobs do
+# not accidentally fall back to server-owned credentials.
 config_path = Path(__file__).parent.parent / "configs" / "model_config.yaml"
 model_config = {}
-if config_path.exists():
+if os.getenv("PAPERBANANA_IGNORE_MODEL_CONFIG", "0") != "1" and config_path.exists():
     with open(config_path, "r", encoding="utf-8-sig") as f:
         model_config = yaml.safe_load(f) or {}
 

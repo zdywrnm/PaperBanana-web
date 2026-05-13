@@ -1,0 +1,24 @@
+FROM node:24-alpine AS web-build
+WORKDIR /app/web-client
+COPY web-client/package.json web-client/package-lock.json* ./
+RUN npm install
+COPY web-client/ ./
+RUN npm run build
+
+FROM python:3.12-slim
+
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+ENV PAPERBANANA_FRONTEND_DIST=/app/web-client/dist
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+COPY --from=web-build /app/web-client/dist /app/web-client/dist
+
+RUN mkdir -p /app/paperbanana_web_data/results
+
+EXPOSE 8080
+CMD ["uvicorn", "paperbanana_web.backend.app:app", "--host", "0.0.0.0", "--port", "8080"]

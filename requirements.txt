@@ -1,6 +1,8 @@
 google-genai
 gradio>=5.0.0
 streamlit
+fastapi
+uvicorn[standard]
 asyncio
 aiofiles
 pillow

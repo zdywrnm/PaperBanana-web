@@ -6,3 +6,8 @@ __pycache__/
 .venv/
 data/
 results/
+paperbanana_web_data/
+web-client/node_modules/
+web-client/dist/
+.playwright-cli/
+output/
