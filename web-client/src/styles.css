@@ -526,6 +526,58 @@ figcaption {
   line-height: 1.5;
 }
 
+.api-key-guide {
+  margin-top: 2px;
+  padding: 12px 0 2px;
+  border-top: 1px solid #eef2f7;
+}
+
+.api-key-guide-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 740;
+}
+
+.api-key-guide-head svg {
+  color: #f59e0b;
+}
+
+.api-key-guide ol {
+  margin: 8px 0 10px;
+  padding-left: 18px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.api-key-guide li + li {
+  margin-top: 4px;
+}
+
+.api-key-guide a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #b45309;
+  font-size: 12px;
+  font-weight: 720;
+  text-decoration: none;
+}
+
+.api-key-guide a:hover {
+  color: #92400e;
+  text-decoration: underline;
+}
+
+.api-keys-panel .api-key-guide-note {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
 .admin-controls {
   display: grid;
   grid-template-columns: 1fr auto;

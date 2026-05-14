@@ -3,8 +3,10 @@ import { createRoot } from 'react-dom/client';
 import {
   Activity,
   AlertTriangle,
+  BookOpen,
   CheckCircle2,
   Eye,
+  ExternalLink,
   FileText,
   Image as ImageIcon,
   KeyRound,
@@ -28,6 +30,12 @@ const PROVIDERS = {
     keyPlaceholder: 'sk-or-v1-...',
     mainModel: 'openrouter/google/gemini-3.1-pro-preview',
     imageModel: 'openrouter/google/gemini-3.1-flash-image-preview',
+    guideUrl: 'https://openrouter.ai/settings/keys',
+    guideSteps: [
+      '登录 OpenRouter，进入 Keys 页面。',
+      '点击 Create Key，创建一个新的 API Key。',
+      '复制 sk-or-v1- 开头的密钥，粘贴到上方输入框。',
+    ],
   },
   gemini: {
     label: 'Gemini',
@@ -35,6 +43,12 @@ const PROVIDERS = {
     keyPlaceholder: 'AIza...',
     mainModel: 'gemini-3.1-pro-preview',
     imageModel: 'gemini-3.1-flash-image-preview',
+    guideUrl: 'https://aistudio.google.com/app/apikey',
+    guideSteps: [
+      '登录 Google AI Studio，进入 API Keys 页面。',
+      '点击 Create API key，选择或创建项目。',
+      '复制生成的 AIza 开头密钥，粘贴到上方输入框。',
+    ],
   },
   openai: {
     label: 'OpenAI',
@@ -42,6 +56,12 @@ const PROVIDERS = {
     keyPlaceholder: 'sk-...',
     mainModel: 'gpt-4o',
     imageModel: 'gpt-image-1',
+    guideUrl: 'https://platform.openai.com/api-keys',
+    guideSteps: [
+      '登录 OpenAI Platform，进入 API keys 页面。',
+      '点击 Create new secret key，创建密钥。',
+      '复制 sk- 开头的密钥，粘贴到上方输入框。',
+    ],
   },
   bailian: {
     label: '阿里百炼',
@@ -49,6 +69,12 @@ const PROVIDERS = {
     keyPlaceholder: 'sk-...',
     mainModel: 'qwen-plus',
     imageModel: 'wan2.7-image',
+    guideUrl: 'https://help.aliyun.com/zh/model-studio/get-api-key',
+    guideSteps: [
+      '登录阿里云百炼控制台，确认已开通百炼模型服务。',
+      '进入 API Key 页面，点击创建 API Key。',
+      '建议选择默认业务空间和全部权限，复制 sk- 开头密钥。',
+    ],
   },
 };
 
@@ -242,6 +268,7 @@ function App() {
                 />
               </div>
             </label>
+            <ApiKeyGuide providerConfig={providerConfig} />
           </details>
 
           <label className="field">
@@ -367,6 +394,25 @@ function App() {
         </div>
       </section>
     </main>
+  );
+}
+
+function ApiKeyGuide({ providerConfig }) {
+  return (
+    <div className="api-key-guide">
+      <div className="api-key-guide-head">
+        <BookOpen size={16} />
+        <span>API Key 申请指南</span>
+      </div>
+      <ol>
+        {providerConfig.guideSteps.map((step) => <li key={step}>{step}</li>)}
+      </ol>
+      <a href={providerConfig.guideUrl} target="_blank" rel="noreferrer">
+        打开 {providerConfig.label} 官方申请/说明页面
+        <ExternalLink size={14} />
+      </a>
+      <p className="api-key-guide-note">密钥只用于本次任务调用模型，不会保存到本站数据库。</p>
+    </div>
   );
 }
 
