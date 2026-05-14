@@ -39,8 +39,10 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_BACKEND_MODE: laf
-          VITE_API_BASE: https://sdswgya641.sealoshzh.site
+          VITE_BACKEND_MODE: gateway
+          VITE_API_BASE: https://api.paperbanana.asia
+          VITE_AUTH_ENABLED: true
+          VITE_AUTH_BASE: https://api.paperbanana.asia
           VITE_BASE_PATH: /
 
       - name: Upload Pages artifact

@@ -13,6 +13,7 @@ const trustedOrigins = parseList(
     'http://localhost:5173,http://127.0.0.1:5173,https://www.paperbanana.asia,https://paperbanana.asia',
 );
 const cookieDomain = process.env.COOKIE_DOMAIN || '';
+const cookieSameSite = (process.env.COOKIE_SAME_SITE || '').toLowerCase();
 
 export const mongoClient = new MongoClient(mongoUri);
 await mongoClient.connect();
@@ -26,6 +27,12 @@ if (cookieDomain) {
   advanced.crossSubDomainCookies = {
     enabled: true,
     domain: cookieDomain,
+  };
+}
+
+if (['lax', 'strict', 'none'].includes(cookieSameSite)) {
+  advanced.defaultCookieAttributes = {
+    sameSite: cookieSameSite,
   };
 }
 
