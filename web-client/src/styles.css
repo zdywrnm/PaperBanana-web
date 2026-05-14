@@ -125,6 +125,47 @@ button {
   background: #fffbeb;
 }
 
+.auth-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  max-width: 320px;
+  padding: 5px 8px 5px 12px;
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auth-user span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-user button,
+.text-button {
+  border: 0;
+  background: transparent;
+  color: #b45309;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.auth-user button {
+  padding: 3px 6px;
+}
+
+.text-button {
+  justify-self: start;
+  margin-top: 14px;
+  padding: 0;
+}
+
 .paper-tabs {
   display: flex;
   gap: 8px;
@@ -157,6 +198,8 @@ button {
 
 .generator,
 .input-results,
+.auth-panel,
+.user-jobs-panel,
 .admin-panel {
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid #e2e8f0;
@@ -179,6 +222,31 @@ button {
 .admin-panel {
   margin-top: 18px;
   padding: 20px;
+}
+
+.auth-panel,
+.user-jobs-panel {
+  padding: 20px;
+}
+
+.auth-panel {
+  display: grid;
+  width: min(520px, 100%);
+  margin: 0 auto;
+}
+
+.auth-panel > p {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.auth-form {
+  display: grid;
+}
+
+.user-jobs-panel {
+  margin-top: 18px;
 }
 
 .section-head {
@@ -694,6 +762,10 @@ figcaption {
   font-size: 13px;
 }
 
+.job-row.with-user {
+  grid-template-columns: 120px 110px minmax(160px, 1fr) 90px 100px 120px minmax(180px, 1fr) 100px;
+}
+
 .job-row:first-child {
   border-top: 0;
 }
@@ -758,6 +830,10 @@ figcaption {
     justify-content: flex-start;
   }
 
+  .auth-user {
+    max-width: 100%;
+  }
+
   .two-col,
   .input-options,
   .settings-grid,
@@ -785,5 +861,9 @@ figcaption {
   .job-row {
     grid-template-columns: 1fr;
     gap: 6px;
+  }
+
+  .job-row.with-user {
+    grid-template-columns: 1fr;
   }
 }

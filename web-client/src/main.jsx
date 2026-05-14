@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { createAuthClient } from 'better-auth/react';
 import {
-  Activity,
   AlertTriangle,
   BookOpen,
   CheckCircle2,
@@ -22,6 +22,15 @@ import './styles.css';
 
 const API_BASE_DEFAULT = import.meta.env.VITE_API_BASE || '';
 const BACKEND_MODE = import.meta.env.VITE_BACKEND_MODE || '';
+const AUTH_REQUIRED = import.meta.env.VITE_AUTH_REQUIRED === 'true';
+const AUTH_BASE_DEFAULT = import.meta.env.VITE_AUTH_BASE || API_BASE_DEFAULT || '';
+
+const authClient = createAuthClient({
+  ...(AUTH_BASE_DEFAULT ? { baseURL: AUTH_BASE_DEFAULT } : {}),
+  fetchOptions: {
+    credentials: 'include',
+  },
+});
 
 const PROVIDERS = {
   openrouter: {
@@ -98,7 +107,51 @@ const STATUS_LABELS = {
   failed: '失败',
 };
 
+function useAuthSession() {
+  const [session, setSession] = useState(null);
+  const [isPending, setIsPending] = useState(AUTH_REQUIRED);
+  const [error, setError] = useState(null);
+
+  async function refresh() {
+    if (!AUTH_REQUIRED) {
+      setIsPending(false);
+      setSession(null);
+      setError(null);
+      return null;
+    }
+    setIsPending(true);
+    const { data, error: authError } = await authClient.getSession();
+    setSession(data || null);
+    setError(authError || null);
+    setIsPending(false);
+    return data || null;
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!AUTH_REQUIRED) {
+      setIsPending(false);
+      return undefined;
+    }
+    authClient.getSession()
+      .then(({ data, error: authError }) => {
+        if (cancelled) return;
+        setSession(data || null);
+        setError(authError || null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsPending(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { session, isPending, error, refresh };
+}
+
 function App() {
+  const authSession = useAuthSession();
   const [apiBase, setApiBase] = useState(API_BASE_DEFAULT);
   const [configurationMode, setConfigurationMode] = useState('simple');
   const [provider, setProvider] = useState('bailian');
@@ -122,7 +175,11 @@ function App() {
   const [adminToken, setAdminToken] = useState('');
   const [adminJobs, setAdminJobs] = useState([]);
   const [adminError, setAdminError] = useState('');
+  const [userJobs, setUserJobs] = useState([]);
+  const [userJobsError, setUserJobsError] = useState('');
 
+  const currentUser = AUTH_REQUIRED ? authSession.session?.user : null;
+  const authReady = !AUTH_REQUIRED || Boolean(!authSession.isPending && currentUser);
   const providerConfig = PROVIDERS[provider];
   const selectedKey = apiKeys[providerConfig.keyName] || '';
   const apiBaseNormalized = apiBase.replace(/\/$/, '');
@@ -170,8 +227,17 @@ function App() {
   const canSubmit = useMemo(() => {
     const hasKey = selectedKey.trim();
     const canMock = isAdvancedMode && mock && health?.mock_enabled;
-    return (hasKey || canMock) && methodContent.trim().length >= 20 && caption.trim().length >= 3 && !isSubmitting;
-  }, [selectedKey, methodContent, caption, isSubmitting, mock, health, isAdvancedMode]);
+    return authReady && (hasKey || canMock) && methodContent.trim().length >= 20 && caption.trim().length >= 3 && !isSubmitting;
+  }, [authReady, selectedKey, methodContent, caption, isSubmitting, mock, health, isAdvancedMode]);
+
+  useEffect(() => {
+    if (!AUTH_REQUIRED || !currentUser) return undefined;
+    let cancelled = false;
+    loadUserJobs({ silent: true, cancelledRef: () => cancelled });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBaseNormalized, currentUser?.id, health]);
 
   async function submitJob(event) {
     event.preventDefault();
@@ -205,6 +271,7 @@ function App() {
       };
       const created = await createJobRequest(apiBaseNormalized, health, payload);
       setCurrentJobId(created.id);
+      if (AUTH_REQUIRED) void loadUserJobs({ silent: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -220,6 +287,27 @@ function App() {
     } catch (err) {
       setAdminError(err.message);
     }
+  }
+
+  async function loadUserJobs(options = {}) {
+    if (!AUTH_REQUIRED || !currentUser) return;
+    if (!options.silent) setUserJobsError('');
+    try {
+      const data = await userJobsRequest(apiBaseNormalized, health);
+      if (options.cancelledRef?.()) return;
+      setUserJobs(data.jobs || []);
+    } catch (err) {
+      if (options.cancelledRef?.()) return;
+      setUserJobsError(err.message);
+    }
+  }
+
+  async function handleSignOut() {
+    await authClient.signOut();
+    await authSession.refresh();
+    setCurrentJobId('');
+    setJob(null);
+    setUserJobs([]);
   }
 
   return (
@@ -242,6 +330,13 @@ function App() {
           <a href="https://github.com/dwzhu-pku/PaperBanana" target="_blank" rel="noreferrer">
             <Sparkles size={16} /> GitHub
           </a>
+          {AUTH_REQUIRED && currentUser ? (
+            <div className="auth-user">
+              <ShieldCheck size={16} />
+              <span title={currentUser.email}>{currentUser.email}</span>
+              <button type="button" onClick={handleSignOut}>退出</button>
+            </div>
+          ) : null}
         </div>
       </header>
 
@@ -250,6 +345,15 @@ function App() {
         <button type="button">任务记录</button>
       </nav>
 
+      {AUTH_REQUIRED && authSession.isPending ? (
+        <section className="auth-panel">
+          <Loader2 className="spin" size={24} />
+          <p>正在检查登录状态</p>
+        </section>
+      ) : AUTH_REQUIRED && !currentUser ? (
+        <AuthPanel onAuthenticated={authSession.refresh} />
+      ) : (
+        <>
       <section className="workspace">
         <form className="generator" onSubmit={submitJob}>
           <div className="section-head">
@@ -430,6 +534,24 @@ function App() {
         </section>
       </section>
 
+      {AUTH_REQUIRED ? (
+        <section className="user-jobs-panel">
+          <div className="section-head">
+            <FileText size={20} />
+            <div>
+              <h2>我的任务记录</h2>
+              <p>只显示当前账号提交过的任务。</p>
+            </div>
+          </div>
+          <div className="admin-controls">
+            <input value={currentUser?.email || ''} readOnly aria-label="当前账号" />
+            <button type="button" onClick={() => loadUserJobs()}><RefreshCcw size={17} />刷新</button>
+          </div>
+          {userJobsError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(userJobsError)}</div> : null}
+          <JobTable jobs={userJobs} showUser={false} />
+        </section>
+      ) : null}
+
       <section className="admin-panel">
         <div className="section-head">
           <Eye size={20} />
@@ -443,30 +565,108 @@ function App() {
           <button type="button" onClick={loadAdminJobs}><RefreshCcw size={17} />刷新</button>
         </div>
         {adminError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(adminError)}</div> : null}
-        <div className="job-table">
-          <div className="job-row head">
-            <span>时间</span>
-            <span>状态</span>
-            <span>模式</span>
-            <span>接口</span>
-            <span>类别</span>
-            <span>模型</span>
-            <span>输入</span>
-          </div>
-          {adminJobs.map((item) => (
-            <div className="job-row" key={item.id}>
-              <span>{formatDate(item.created_at || item.createdAt)}</span>
-              <span><StatusBadge status={item.status} /></span>
-              <span>{formatConfigurationMode(item.configuration_mode)}</span>
-              <span>{item.provider}</span>
-              <span>{item.infographic_category}</span>
-              <span title={`${item.main_model_name} / ${item.image_gen_model_name}`}>{item.main_model_name}</span>
-              <span title={item.caption}>{item.prompt_char_count} 字</span>
-            </div>
-          ))}
-        </div>
+        <JobTable jobs={adminJobs} showUser />
       </section>
+        </>
+      )}
     </main>
+  );
+}
+
+function AuthPanel({ onAuthenticated }) {
+  const [mode, setMode] = useState('sign-in');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSignUp = mode === 'sign-up';
+
+  async function submitAuth(event) {
+    event.preventDefault();
+    setError('');
+    setIsSubmitting(true);
+    try {
+      const action = isSignUp
+        ? authClient.signUp.email({
+            email,
+            password,
+            name: name.trim() || email.split('@')[0] || 'PaperBanana 用户',
+          })
+        : authClient.signIn.email({ email, password });
+      const { error: authError } = await action;
+      if (authError) throw new Error(authError.message || '登录失败');
+      await onAuthenticated();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="auth-panel">
+      <div className="section-head">
+        <ShieldCheck size={22} />
+        <div>
+          <h2>{isSignUp ? '注册账号' : '登录账号'}</h2>
+          <p>登录后可以生成图片，并在任务记录里查看历史结果。</p>
+        </div>
+      </div>
+      <form className="auth-form" onSubmit={submitAuth}>
+        {isSignUp ? (
+          <label className="field">
+            <span>昵称</span>
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="可选" autoComplete="name" />
+          </label>
+        ) : null}
+        <label className="field">
+          <span>邮箱</span>
+          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" autoComplete="email" required />
+        </label>
+        <label className="field">
+          <span>密码</span>
+          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="至少 8 位" autoComplete={isSignUp ? 'new-password' : 'current-password'} required />
+        </label>
+        <button className="primary-button" type="submit" disabled={isSubmitting || !email || password.length < 8}>
+          {isSubmitting ? <Loader2 className="spin" size={18} /> : <ShieldCheck size={18} />}
+          {isSignUp ? '注册并登录' : '登录'}
+        </button>
+        {error ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(error)}</div> : null}
+      </form>
+      <button className="text-button" type="button" onClick={() => setMode(isSignUp ? 'sign-in' : 'sign-up')}>
+        {isSignUp ? '已有账号，去登录' : '没有账号，去注册'}
+      </button>
+    </section>
+  );
+}
+
+function JobTable({ jobs, showUser }) {
+  return (
+    <div className="job-table">
+      <div className={`job-row head ${showUser ? 'with-user' : ''}`}>
+        <span>时间</span>
+        <span>状态</span>
+        {showUser ? <span>用户</span> : null}
+        <span>模式</span>
+        <span>接口</span>
+        <span>类别</span>
+        <span>模型</span>
+        <span>输入</span>
+      </div>
+      {jobs.map((item) => (
+        <div className={`job-row ${showUser ? 'with-user' : ''}`} key={item.id}>
+          <span>{formatDate(item.created_at || item.createdAt)}</span>
+          <span><StatusBadge status={item.status} /></span>
+          {showUser ? <span title={item.user_email}>{item.user_email || '匿名'}</span> : null}
+          <span>{formatConfigurationMode(item.configuration_mode)}</span>
+          <span>{item.provider}</span>
+          <span>{item.infographic_category}</span>
+          <span title={`${item.main_model_name} / ${item.image_gen_model_name}`}>{item.main_model_name}</span>
+          <span title={item.caption}>{item.prompt_char_count} 字</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -543,7 +743,9 @@ function StatusBadge({ status }) {
 }
 
 async function fetchBackendHealth(apiBase) {
-  const candidates = lafEndpoint(apiBase) === apiBase
+  const candidates = BACKEND_MODE === 'gateway'
+    ? [{ mode: 'gateway', url: lafEndpoint(apiBase) }]
+    : lafEndpoint(apiBase) === apiBase
     ? [{ mode: 'laf', url: apiBase }]
     : [
         { mode: 'laf', url: lafEndpoint(apiBase) },
@@ -555,6 +757,7 @@ async function fetchBackendHealth(apiBase) {
     try {
       const data = await fetchJson(candidate.url);
       if (candidate.mode === 'laf' && data.runtime !== 'laf') throw new Error('当前地址不是 Laf 后端');
+      if (candidate.mode === 'gateway' && data.runtime !== 'gateway') throw new Error('当前地址不是认证网关');
       if (candidate.mode === 'fastapi' && !data.ok) throw new Error('当前地址不是 FastAPI 后端');
       return { ...data, backendMode: candidate.mode };
     } catch (err) {
@@ -637,8 +840,21 @@ async function adminJobsRequest(apiBase, health, adminToken) {
   });
 }
 
+async function userJobsRequest(apiBase, health) {
+  if (!shouldUseLaf(apiBase, health)) {
+    return fetchJson(`${apiBase}/api/jobs?scope=mine&limit=50`);
+  }
+  const data = await fetchJson(lafEndpoint(apiBase), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'myJobs', limit: 50 }),
+  });
+  return { jobs: (data.jobs || []).map(normalizeJob) };
+}
+
 function shouldUseLaf(apiBase, health) {
   if (BACKEND_MODE === 'fastapi') return false;
+  if (BACKEND_MODE === 'gateway') return true;
   if (BACKEND_MODE === 'laf') return true;
   if (health?.backendMode) return health.backendMode === 'laf';
   return apiBase.includes('paperbanana-api') || apiBase === '';
@@ -660,6 +876,8 @@ function normalizeJob(job = {}) {
     id: job.id || job._id,
     status: job.status,
     provider: job.provider,
+    user_id: job.user_id || job.userId || '',
+    user_email: job.user_email || job.userEmail || '',
     configuration_mode: job.configuration_mode || job.configurationMode || 'advanced',
     method_content: job.method_content || job.methodContent || '',
     caption: job.caption || '',
@@ -693,7 +911,8 @@ function resolveImageUrl(apiBase, url) {
 }
 
 async function fetchJson(url, options = {}) {
-  const res = await fetch(url, options);
+  const fetchOptions = AUTH_REQUIRED ? { credentials: 'include', ...options } : options;
+  const res = await fetch(url, fetchOptions);
   const text = await res.text();
   let data = {};
   if (text) {
@@ -712,6 +931,8 @@ async function fetchJson(url, options = {}) {
 function formatErrorMessage(message) {
   if (!message) return '';
   if (message.includes('Missing API key')) return '缺少所选模型接口的 API 密钥。';
+  if (message.includes('Please log in') || message.includes('请先登录') || message.includes('Unauthorized')) return '请先登录后再使用生成服务。';
+  if (message.includes('password')) return '密码至少需要 8 位。';
   if (message.includes('ADMIN_TOKEN is not configured')) return '管理接口未启用：还没有配置 ADMIN_TOKEN。';
   if (message.includes('Admin API disabled')) return '管理接口未启用。';
   if (message.includes('Backend is unavailable')) return '后端暂时不可用。';

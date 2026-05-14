@@ -12,7 +12,10 @@ type ApiKeys = {
 
 type CreateJobBody = {
   action: 'createJob'
+  gatewayToken?: string
   configurationMode?: 'simple' | 'advanced'
+  userId?: string
+  userEmail?: string
   provider: Provider
   apiKeys: ApiKeys
   methodContent: string
@@ -28,7 +31,15 @@ type CreateJobBody = {
 
 type GetJobBody = {
   action: 'getJob'
+  gatewayToken?: string
   jobId: string
+}
+
+type UserJobsBody = {
+  action: 'userJobs'
+  gatewayToken?: string
+  userId: string
+  limit?: number
 }
 
 type AdminJobsBody = {
@@ -46,7 +57,7 @@ type HealthBody = {
   action: 'health'
 }
 
-type RequestBody = CreateJobBody | GetJobBody | AdminJobsBody | InitDatabaseBody | HealthBody
+type RequestBody = CreateJobBody | GetJobBody | UserJobsBody | AdminJobsBody | InitDatabaseBody | HealthBody
 
 const db = cloud.mongo.db
 const jobs = db.collection('paperbanana_jobs')
@@ -66,13 +77,16 @@ export default async function (ctx: FunctionContext) {
 
   try {
     if (action === 'health') {
-      return ok({ ok: true, runtime: 'laf', version: '0.1.5', bucketName })
+      return ok({ ok: true, runtime: 'laf', version: '0.1.6', bucketName })
     }
     if (action === 'createJob') {
       return await createJob(body as CreateJobBody, ctx)
     }
     if (action === 'getJob') {
-      return await getJob((body as GetJobBody).jobId)
+      return await getJob(body as GetJobBody)
+    }
+    if (action === 'userJobs') {
+      return await userJobs(body as UserJobsBody)
     }
     if (action === 'adminJobs') {
       return await adminJobs(body as AdminJobsBody)
@@ -94,6 +108,8 @@ function setCorsHeaders(ctx: FunctionContext) {
 }
 
 async function createJob(body: CreateJobBody, ctx: FunctionContext) {
+  const gatewayError = requireGatewayIfConfigured(body.gatewayToken)
+  if (gatewayError) return gatewayError
   validateCreateBody(body)
   const apiKey = selectApiKey(body.provider, body.apiKeys)
   if (!apiKey) {
@@ -103,6 +119,8 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
   const now = new Date()
   const jobId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
   const configurationMode = cleanConfigurationMode(body.configurationMode)
+  const userId = cleanOwnerId(body.userId)
+  const userEmail = cleanUserEmail(body.userEmail)
   const infographicCategory = cleanInfographicCategory(body.infographicCategory)
   const safeNumCandidates = clamp(Number(body.numCandidates || 1), 1, Number(process.env.PAPERBANANA_MAX_CANDIDATES || 3))
   const safeCriticRounds = clamp(Number(body.maxCriticRounds || 1), 0, Number(process.env.PAPERBANANA_MAX_CRITIC_ROUNDS || 2))
@@ -111,6 +129,8 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
     _id: jobId,
     status: 'queued' as JobStatus,
     configurationMode,
+    userId,
+    userEmail,
     provider: body.provider,
     methodContent: body.methodContent,
     caption: body.caption,
@@ -137,6 +157,8 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
   await recordEvent('job_created', {
     jobId,
     configurationMode,
+    userId,
+    userEmail,
     provider: body.provider,
     mainModelName: body.mainModelName,
     imageModelName: body.imageModelName,
@@ -158,11 +180,25 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
   return ok({ jobId, status: 'queued' })
 }
 
-async function getJob(jobId: string) {
+async function getJob(body: GetJobBody) {
+  const gatewayError = requireGatewayIfConfigured(body.gatewayToken)
+  if (gatewayError) return gatewayError
+  const jobId = body.jobId
   if (!jobId) return fail('jobId is required', 400)
   const job = await jobs.findOne({ _id: jobId })
   if (!job) return fail('Job not found', 404)
-  return ok({ job: await publicJob(job, { includeImageData: true }) })
+  return ok({ job: await publicJob(job, { includeImageData: true, includeOwner: true }) })
+}
+
+async function userJobs(body: UserJobsBody) {
+  const gatewayError = requireGatewayIfConfigured(body.gatewayToken)
+  if (gatewayError) return gatewayError
+  const userId = cleanOwnerId(body.userId)
+  if (!userId) return fail('userId is required', 400)
+  const limit = clamp(Number(body.limit || 50), 1, 100)
+  const list = await jobs.find({ userId }).sort({ createdAt: -1 }).limit(limit).toArray()
+  const publicJobs = await Promise.all(list.map((job: any) => publicJob(job, { includeImageData: false })))
+  return ok({ jobs: publicJobs })
 }
 
 async function adminJobs(body: AdminJobsBody) {
@@ -170,7 +206,7 @@ async function adminJobs(body: AdminJobsBody) {
   if (authError) return authError
   const limit = clamp(Number(body.limit || 50), 1, 200)
   const list = await jobs.find({}).sort({ createdAt: -1 }).limit(limit).toArray()
-  const publicJobs = await Promise.all(list.map((job: any) => publicJob(job, { includeImageData: false })))
+  const publicJobs = await Promise.all(list.map((job: any) => publicJob(job, { includeImageData: false, includeOwner: true, includeUserEmail: true })))
   return ok({ jobs: publicJobs })
 }
 
@@ -182,6 +218,7 @@ async function initDatabase(body: InitDatabaseBody) {
     createIndex(jobs, 'paperbanana_jobs', { createdAt: -1 }, { name: 'createdAt_desc' }),
     createIndex(jobs, 'paperbanana_jobs', { status: 1, updatedAt: -1 }, { name: 'status_updatedAt_desc' }),
     createIndex(jobs, 'paperbanana_jobs', { provider: 1, createdAt: -1 }, { name: 'provider_createdAt_desc' }),
+    createIndex(jobs, 'paperbanana_jobs', { userId: 1, createdAt: -1 }, { name: 'userId_createdAt_desc' }),
     createIndex(jobs, 'paperbanana_jobs', { configurationMode: 1, createdAt: -1 }, { name: 'configurationMode_createdAt_desc' }),
     createIndex(jobs, 'paperbanana_jobs', { infographicCategory: 1, createdAt: -1 }, { name: 'infographicCategory_createdAt_desc' }),
     createIndex(images, 'paperbanana_images', { jobId: 1, candidateId: 1 }, { name: 'job_candidate' }),
@@ -250,6 +287,7 @@ async function runJob(
   await recordEvent('job_succeeded', {
     jobId,
     configurationMode: cleanConfigurationMode(body.configurationMode),
+    userId: cleanOwnerId(body.userId),
     provider: body.provider,
     mainModelName: body.mainModelName,
     imageModelName: body.imageModelName,
@@ -540,6 +578,7 @@ async function markFailed(jobId: string, error: string) {
   await recordEvent('job_failed', {
     jobId,
     configurationMode: existing?.configurationMode || 'advanced',
+    userId: existing?.userId || '',
     provider: existing?.provider || '',
     mainModelName: existing?.mainModelName || '',
     imageModelName: existing?.imageModelName || '',
@@ -658,6 +697,14 @@ function cleanConfigurationMode(value?: string) {
   return value === 'simple' ? 'simple' : 'advanced'
 }
 
+function cleanOwnerId(value?: string) {
+  return String(value || '').trim().slice(0, 120)
+}
+
+function cleanUserEmail(value?: string) {
+  return String(value || '').trim().toLowerCase().slice(0, 200)
+}
+
 function selectApiKey(provider: Provider, apiKeys: ApiKeys) {
   if (provider === 'openrouter') return apiKeys?.openrouter?.trim() || ''
   if (provider === 'gemini') return apiKeys?.gemini?.trim() || ''
@@ -668,11 +715,13 @@ function selectApiKey(provider: Provider, apiKeys: ApiKeys) {
 
 type PublicJobOptions = {
   includeImageData: boolean
+  includeOwner?: boolean
+  includeUserEmail?: boolean
 }
 
 async function publicJob(job: any, options: PublicJobOptions) {
   const resultImages = await publicResultImages(job.resultImages || [], options)
-  return {
+  const publicRecord: any = {
     id: job._id,
     status: job.status,
     configurationMode: job.configurationMode || 'advanced',
@@ -696,6 +745,15 @@ async function publicJob(job: any, options: PublicJobOptions) {
     startedAt: job.startedAt,
     completedAt: job.completedAt,
   }
+
+  if (options.includeOwner) {
+    publicRecord.userId = job.userId || ''
+  }
+  if (options.includeUserEmail) {
+    publicRecord.userEmail = job.userEmail || ''
+  }
+
+  return publicRecord
 }
 
 async function publicResultImages(resultImages: any[], options: PublicJobOptions) {
@@ -760,6 +818,13 @@ function requireAdminIfConfigured(adminToken: string) {
   const expected = process.env.ADMIN_TOKEN || ''
   if (!expected) return null
   if (adminToken !== expected) return fail('Invalid admin token', 401)
+  return null
+}
+
+function requireGatewayIfConfigured(gatewayToken?: string) {
+  const expected = process.env.PAPERBANANA_GATEWAY_TOKEN || ''
+  if (!expected) return null
+  if (gatewayToken !== expected) return fail('Invalid gateway token', 401)
   return null
 }
 
