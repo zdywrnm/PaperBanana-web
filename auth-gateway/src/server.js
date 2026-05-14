@@ -79,29 +79,30 @@ app.post('/paperbanana-api', async (req, res) => {
       return sendLafResponse(res, data);
     }
 
-    const session = await requireSession(req);
-
     if (action === 'createJob') {
+      const session = await optionalSession(req);
       const data = await callLaf(
         withGatewayToken({
           ...req.body,
-          userId: session.user.id,
-          userEmail: session.user.email,
+          userId: session?.user?.id || '',
+          userEmail: session?.user?.email || '',
         }),
       );
       return sendLafResponse(res, data);
     }
 
     if (action === 'getJob') {
+      const session = await optionalSession(req);
       const data = await callLaf(withGatewayToken(req.body));
       const ownerId = data?.job?.userId || data?.job?.user_id || '';
-      if (ownerId && ownerId !== session.user.id) {
+      if (ownerId && ownerId !== session?.user?.id) {
         return res.status(403).json({ code: 403, error: 'Forbidden' });
       }
       return sendLafResponse(res, data);
     }
 
     if (action === 'myJobs') {
+      const session = await requireSession(req);
       const data = await callLaf(
         withGatewayToken({
           action: 'userJobs',
@@ -132,14 +133,19 @@ async function shutdown() {
 }
 
 async function requireSession(req) {
-  const session = await auth.api.getSession({
-    headers: fromNodeHeaders(req.headers),
-  });
+  const session = await optionalSession(req);
   if (!session?.user) {
-    const error = new Error('请先登录后再使用生成服务。');
+    const error = new Error('请先登录后再使用任务记录。');
     error.status = 401;
     throw error;
   }
+  return session;
+}
+
+async function optionalSession(req) {
+  const session = await auth.api.getSession({
+    headers: fromNodeHeaders(req.headers),
+  });
   return session;
 }
 

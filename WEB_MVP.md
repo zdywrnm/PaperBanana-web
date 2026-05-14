@@ -4,7 +4,7 @@ This MVP turns PaperBanana into a BYOK web app:
 
 - Customers paste their own OpenRouter, Gemini, OpenAI, or Alibaba Bailian API key.
 - The frontend defaults to simple mode: customers choose one provider and paste one API key. Advanced mode exposes model names, pipeline, aspect ratio, candidate count, and backend address.
-- Optional Better Auth login can be enabled through the auth gateway. In that mode, users register/sign in with email and password before generating images, and task history is filtered by user.
+- Optional Better Auth login can be enabled through the auth gateway. Users can still generate images without an account; login is only required for the personal task history view.
 - API keys are injected only into the isolated generation subprocess and are not stored in SQLite.
 - Task records, prompts, status, logs, and generated images are stored for product analysis.
 - Admin task listing is protected with `ADMIN_TOKEN`.
@@ -49,17 +49,19 @@ VITE_BASE_PATH=/ \
 npm run build
 ```
 
-After the auth gateway is deployed, build the frontend against it:
+After the auth gateway is deployed, build the frontend against it. This enables the login/register entry and personal task records without forcing login for generation:
 
 ```bash
 cd web-client
-VITE_AUTH_REQUIRED=true \
+VITE_AUTH_ENABLED=true \
 VITE_AUTH_BASE=https://api.paperbanana.asia \
 VITE_BACKEND_MODE=gateway \
 VITE_API_BASE=https://api.paperbanana.asia \
 VITE_BASE_PATH=/ \
 npm run build
 ```
+
+The login/register entry is visible by default so the product has a stable account entry point. Before `VITE_AUTH_ENABLED=true` is configured, clicking it shows a short "account service is being configured" message. Set `VITE_AUTH_UI=false` only if the entry needs to be hidden.
 
 The included GitHub Actions workflow `.github/workflows/deploy-pages.yml` builds `web-client` and deploys `web-client/dist` to GitHub Pages. In the GitHub repository, set Pages source to **GitHub Actions**.
 
@@ -130,6 +132,8 @@ The auth gateway is a Node/Express service:
 - protected PaperBanana proxy: `/paperbanana-api`
 - database: MongoDB via Better Auth MongoDB adapter.
 
+The gateway allows anonymous `createJob`/`getJob` calls. If a valid Better Auth session is present, it attaches `userId` and `userEmail` before forwarding the task to Laf. The `myJobs` action requires login and returns only the current user's tasks.
+
 Local run:
 
 ```bash
@@ -154,7 +158,7 @@ Production activation sequence:
 1. Deploy `auth-gateway` to Sealos.
 2. Point `api.paperbanana.asia` to the gateway.
 3. Set the same `PAPERBANANA_GATEWAY_TOKEN` in both the gateway and Laf.
-4. Rebuild GitHub Pages with `VITE_AUTH_REQUIRED=true`, `VITE_BACKEND_MODE=gateway`, and `VITE_API_BASE=https://api.paperbanana.asia`.
+4. Rebuild GitHub Pages with `VITE_AUTH_ENABLED=true`, `VITE_BACKEND_MODE=gateway`, and `VITE_API_BASE=https://api.paperbanana.asia`.
 
 ## Sealos Container Deployment
 

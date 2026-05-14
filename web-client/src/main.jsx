@@ -23,7 +23,9 @@ import './styles.css';
 const API_BASE_DEFAULT = import.meta.env.VITE_API_BASE || '';
 const BACKEND_MODE = import.meta.env.VITE_BACKEND_MODE || '';
 const AUTH_REQUIRED = import.meta.env.VITE_AUTH_REQUIRED === 'true';
-const AUTH_BASE_DEFAULT = import.meta.env.VITE_AUTH_BASE || API_BASE_DEFAULT || '';
+const AUTH_BASE_DEFAULT = import.meta.env.VITE_AUTH_BASE || (BACKEND_MODE === 'gateway' ? API_BASE_DEFAULT : '');
+const AUTH_ENABLED = AUTH_REQUIRED || import.meta.env.VITE_AUTH_ENABLED === 'true' || Boolean(import.meta.env.VITE_AUTH_BASE);
+const AUTH_UI_ENABLED = import.meta.env.VITE_AUTH_UI !== 'false';
 
 const authClient = createAuthClient({
   ...(AUTH_BASE_DEFAULT ? { baseURL: AUTH_BASE_DEFAULT } : {}),
@@ -109,11 +111,11 @@ const STATUS_LABELS = {
 
 function useAuthSession() {
   const [session, setSession] = useState(null);
-  const [isPending, setIsPending] = useState(AUTH_REQUIRED);
+  const [isPending, setIsPending] = useState(AUTH_ENABLED);
   const [error, setError] = useState(null);
 
   async function refresh() {
-    if (!AUTH_REQUIRED) {
+    if (!AUTH_ENABLED) {
       setIsPending(false);
       setSession(null);
       setError(null);
@@ -129,7 +131,7 @@ function useAuthSession() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!AUTH_REQUIRED) {
+    if (!AUTH_ENABLED) {
       setIsPending(false);
       return undefined;
     }
@@ -152,6 +154,8 @@ function useAuthSession() {
 
 function App() {
   const authSession = useAuthSession();
+  const [activeTab, setActiveTab] = useState('generate');
+  const [showAuthPanel, setShowAuthPanel] = useState(false);
   const [apiBase, setApiBase] = useState(API_BASE_DEFAULT);
   const [configurationMode, setConfigurationMode] = useState('simple');
   const [provider, setProvider] = useState('bailian');
@@ -178,7 +182,7 @@ function App() {
   const [userJobs, setUserJobs] = useState([]);
   const [userJobsError, setUserJobsError] = useState('');
 
-  const currentUser = AUTH_REQUIRED ? authSession.session?.user : null;
+  const currentUser = AUTH_ENABLED ? authSession.session?.user : null;
   const authReady = !AUTH_REQUIRED || Boolean(!authSession.isPending && currentUser);
   const providerConfig = PROVIDERS[provider];
   const selectedKey = apiKeys[providerConfig.keyName] || '';
@@ -231,7 +235,7 @@ function App() {
   }, [authReady, selectedKey, methodContent, caption, isSubmitting, mock, health, isAdvancedMode]);
 
   useEffect(() => {
-    if (!AUTH_REQUIRED || !currentUser) return undefined;
+    if (!AUTH_ENABLED || !currentUser) return undefined;
     let cancelled = false;
     loadUserJobs({ silent: true, cancelledRef: () => cancelled });
     return () => {
@@ -271,7 +275,7 @@ function App() {
       };
       const created = await createJobRequest(apiBaseNormalized, health, payload);
       setCurrentJobId(created.id);
-      if (AUTH_REQUIRED) void loadUserJobs({ silent: true });
+      if (currentUser) void loadUserJobs({ silent: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -290,7 +294,7 @@ function App() {
   }
 
   async function loadUserJobs(options = {}) {
-    if (!AUTH_REQUIRED || !currentUser) return;
+    if (!AUTH_ENABLED || !currentUser) return;
     if (!options.silent) setUserJobsError('');
     try {
       const data = await userJobsRequest(apiBaseNormalized, health);
@@ -305,6 +309,7 @@ function App() {
   async function handleSignOut() {
     await authClient.signOut();
     await authSession.refresh();
+    setShowAuthPanel(false);
     setCurrentJobId('');
     setJob(null);
     setUserJobs([]);
@@ -330,19 +335,25 @@ function App() {
           <a href="https://github.com/dwzhu-pku/PaperBanana" target="_blank" rel="noreferrer">
             <Sparkles size={16} /> GitHub
           </a>
-          {AUTH_REQUIRED && currentUser ? (
-            <div className="auth-user">
-              <ShieldCheck size={16} />
-              <span title={currentUser.email}>{currentUser.email}</span>
-              <button type="button" onClick={handleSignOut}>退出</button>
-            </div>
+          {AUTH_UI_ENABLED ? (
+            currentUser ? (
+              <div className="auth-user">
+                <ShieldCheck size={16} />
+                <span title={currentUser.email}>{currentUser.email}</span>
+                <button type="button" onClick={handleSignOut}>退出</button>
+              </div>
+            ) : (
+              <button type="button" className="auth-entry-button" onClick={() => setShowAuthPanel(true)}>
+                <ShieldCheck size={16} /> 登录 / 注册
+              </button>
+            )
           ) : null}
         </div>
       </header>
 
       <nav className="paper-tabs">
-        <button type="button" className="active">生成候选图</button>
-        <button type="button">任务记录</button>
+        <button type="button" className={activeTab === 'generate' ? 'active' : ''} onClick={() => setActiveTab('generate')}>生成候选图</button>
+        <button type="button" className={activeTab === 'records' ? 'active' : ''} onClick={() => setActiveTab('records')}>任务记录</button>
       </nav>
 
       {AUTH_REQUIRED && authSession.isPending ? (
@@ -353,6 +364,23 @@ function App() {
       ) : AUTH_REQUIRED && !currentUser ? (
         <AuthPanel onAuthenticated={authSession.refresh} />
       ) : (
+        <>
+      {AUTH_UI_ENABLED && showAuthPanel && !currentUser ? (
+        AUTH_ENABLED ? (
+          <AuthPanel
+            onAuthenticated={async () => {
+              await authSession.refresh();
+              setShowAuthPanel(false);
+              setActiveTab('records');
+            }}
+            onCancel={() => setShowAuthPanel(false)}
+          />
+        ) : (
+          <AuthUnavailablePanel onCancel={() => setShowAuthPanel(false)} />
+        )
+      ) : null}
+
+      {activeTab === 'generate' ? (
         <>
       <section className="workspace">
         <form className="generator" onSubmit={submitJob}>
@@ -534,24 +562,6 @@ function App() {
         </section>
       </section>
 
-      {AUTH_REQUIRED ? (
-        <section className="user-jobs-panel">
-          <div className="section-head">
-            <FileText size={20} />
-            <div>
-              <h2>我的任务记录</h2>
-              <p>只显示当前账号提交过的任务。</p>
-            </div>
-          </div>
-          <div className="admin-controls">
-            <input value={currentUser?.email || ''} readOnly aria-label="当前账号" />
-            <button type="button" onClick={() => loadUserJobs()}><RefreshCcw size={17} />刷新</button>
-          </div>
-          {userJobsError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(userJobsError)}</div> : null}
-          <JobTable jobs={userJobs} showUser={false} />
-        </section>
-      ) : null}
-
       <section className="admin-panel">
         <div className="section-head">
           <Eye size={20} />
@@ -568,12 +578,24 @@ function App() {
         <JobTable jobs={adminJobs} showUser />
       </section>
         </>
+      ) : (
+        <TaskRecordsPanel
+          authEnabled={AUTH_ENABLED}
+          currentUser={currentUser}
+          isPending={authSession.isPending}
+          jobs={userJobs}
+          error={userJobsError}
+          onLogin={() => setShowAuthPanel(true)}
+          onRefresh={() => loadUserJobs()}
+        />
+      )}
+        </>
       )}
     </main>
   );
 }
 
-function AuthPanel({ onAuthenticated }) {
+function AuthPanel({ onAuthenticated, onCancel }) {
   const [mode, setMode] = useState('sign-in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -610,7 +632,7 @@ function AuthPanel({ onAuthenticated }) {
         <ShieldCheck size={22} />
         <div>
           <h2>{isSignUp ? '注册账号' : '登录账号'}</h2>
-          <p>登录后可以生成图片，并在任务记录里查看历史结果。</p>
+          <p>登录后可以在任务记录里查看历史结果，生成候选图仍可直接使用。</p>
         </div>
       </div>
       <form className="auth-form" onSubmit={submitAuth}>
@@ -637,6 +659,77 @@ function AuthPanel({ onAuthenticated }) {
       <button className="text-button" type="button" onClick={() => setMode(isSignUp ? 'sign-in' : 'sign-up')}>
         {isSignUp ? '已有账号，去登录' : '没有账号，去注册'}
       </button>
+      {onCancel ? (
+        <button className="text-button muted" type="button" onClick={onCancel}>暂不登录</button>
+      ) : null}
+    </section>
+  );
+}
+
+function AuthUnavailablePanel({ onCancel }) {
+  return (
+    <section className="auth-panel">
+      <div className="section-head">
+        <ShieldCheck size={22} />
+        <div>
+          <h2>账号登录</h2>
+          <p>账号服务正在配置中。当前不登录也可以正常生成候选图。</p>
+        </div>
+      </div>
+      <div className="login-required-card">
+        <AlertTriangle size={22} />
+        <div>
+          <h3>登录注册暂未接入后端</h3>
+          <p>部署 Better Auth 网关并配置认证地址后，这里会开放邮箱和密码登录注册。</p>
+        </div>
+      </div>
+      <button className="text-button muted" type="button" onClick={onCancel}>返回生成候选图</button>
+    </section>
+  );
+}
+
+function TaskRecordsPanel({ authEnabled, currentUser, isPending, jobs, error, onLogin, onRefresh }) {
+  return (
+    <section className="user-jobs-panel">
+      <div className="section-head">
+        <FileText size={20} />
+        <div>
+          <h2>我的任务记录</h2>
+          <p>任务记录与账号绑定，登录后可以查看自己提交过的任务。</p>
+        </div>
+      </div>
+
+      {isPending ? (
+        <div className="login-required-card">
+          <Loader2 className="spin" size={22} />
+          <div>
+            <h3>正在检查登录状态</h3>
+            <p>请稍候。</p>
+          </div>
+        </div>
+      ) : !currentUser ? (
+        <div className="login-required-card">
+          <ShieldCheck size={22} />
+          <div>
+            <h3>任务记录需要登录后使用</h3>
+            <p>不登录也可以正常生成候选图；登录后，新提交的任务会保存到你的账号记录里。</p>
+            {authEnabled ? (
+              <button type="button" onClick={onLogin}>登录 / 注册</button>
+            ) : (
+              <span>账号服务部署后即可使用。</span>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="admin-controls">
+            <input value={currentUser?.email || ''} readOnly aria-label="当前账号" />
+            <button type="button" onClick={onRefresh}><RefreshCcw size={17} />刷新</button>
+          </div>
+          {error ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(error)}</div> : null}
+          <JobTable jobs={jobs} showUser={false} />
+        </>
+      )}
     </section>
   );
 }
@@ -841,15 +934,18 @@ async function adminJobsRequest(apiBase, health, adminToken) {
 }
 
 async function userJobsRequest(apiBase, health) {
+  if (BACKEND_MODE === 'gateway' || health?.backendMode === 'gateway') {
+    const data = await fetchJson(lafEndpoint(apiBase), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'myJobs', limit: 50 }),
+    });
+    return { jobs: (data.jobs || []).map(normalizeJob) };
+  }
   if (!shouldUseLaf(apiBase, health)) {
     return fetchJson(`${apiBase}/api/jobs?scope=mine&limit=50`);
   }
-  const data = await fetchJson(lafEndpoint(apiBase), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'myJobs', limit: 50 }),
-  });
-  return { jobs: (data.jobs || []).map(normalizeJob) };
+  throw new Error('任务记录需要先启用登录网关。');
 }
 
 function shouldUseLaf(apiBase, health) {
@@ -911,7 +1007,7 @@ function resolveImageUrl(apiBase, url) {
 }
 
 async function fetchJson(url, options = {}) {
-  const fetchOptions = AUTH_REQUIRED ? { credentials: 'include', ...options } : options;
+  const fetchOptions = AUTH_ENABLED ? { credentials: 'include', ...options } : options;
   const res = await fetch(url, fetchOptions);
   const text = await res.text();
   let data = {};
