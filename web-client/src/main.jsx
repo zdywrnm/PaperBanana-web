@@ -102,6 +102,27 @@ const INFOGRAPHIC_CATEGORIES = [
   ['concept_map', '概念关系图', '突出关键词、层级、类别和概念之间的关系。'],
 ];
 
+const QUICK_START_EXAMPLES = [
+  {
+    id: 'paper-framework',
+    label: '论文框架',
+    title: '检索增强多智能体框架',
+    category: 'method_framework',
+    caption: '图 1：检索增强多智能体学术图示生成框架总览。',
+    methodContent: `我们提出一个用于学术图示生成的检索增强多智能体框架。用户输入论文方法内容和目标图注后，系统先由检索器从参考图例库中选取相似案例。规划器将论文文本拆解为模块、箭头关系和视觉层级，风格智能体补充论文发表所需的版式与配色建议。生成器依据视觉规格渲染多张候选图，评审器再检查语义一致性、结构完整性和可读性，并把修改意见反馈给生成器迭代优化。`,
+    hint: '把方法模块、输入输出、评价环节替换成自己的研究内容。',
+  },
+  {
+    id: 'workflow-service',
+    label: '流程说明',
+    title: '资料整理与报告生成流程',
+    category: 'workflow',
+    caption: '图 1：面向资料整理与报告生成的智能工作流。',
+    methodContent: `我们构建一个面向资料整理与报告生成的智能工作流。用户先上传课程资料、访谈记录或业务文档，并填写希望得到的报告主题。系统对输入材料进行解析、去重和分段，随后根据主题检索相关片段并生成报告提纲。内容生成模块按照提纲撰写初稿，人工审核节点负责补充事实、修改表达和确认结构。确认后的内容会进入排版与导出模块，最终生成可分享的图文报告或演示材料。`,
+    hint: '把资料来源、处理步骤、审核节点、交付物换成自己的业务场景。',
+  },
+];
+
 const STATUS_LABELS = {
   queued: '排队中',
   running: '生成中',
@@ -304,6 +325,12 @@ function App() {
       if (options.cancelledRef?.()) return;
       setUserJobsError(err.message);
     }
+  }
+
+  function applyQuickStartExample(example) {
+    setInfographicCategory(example.category);
+    setMethodContent(example.methodContent);
+    setCaption(example.caption);
   }
 
   async function handleSignOut() {
@@ -529,6 +556,8 @@ function App() {
             </div>
           </div>
 
+          <ExampleTemplates examples={QUICK_START_EXAMPLES} onApply={applyQuickStartExample} />
+
           <div className="input-options">
             <Select
               label="信息图类别"
@@ -592,6 +621,27 @@ function App() {
         </>
       )}
     </main>
+  );
+}
+
+function ExampleTemplates({ examples, onApply }) {
+  return (
+    <div className="example-panel">
+      <div className="example-panel-head">
+        <BookOpen size={16} />
+        <span>快速上手案例</span>
+      </div>
+      <div className="example-grid">
+        {examples.map((example) => (
+          <button className="example-card" type="button" key={example.id} onClick={() => onApply(example)}>
+            <span>{example.label}</span>
+            <strong>{example.title}</strong>
+            <small>{example.caption}</small>
+            <em>{example.hint}</em>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
