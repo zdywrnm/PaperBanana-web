@@ -100,13 +100,14 @@ const STATUS_LABELS = {
 
 function App() {
   const [apiBase, setApiBase] = useState(API_BASE_DEFAULT);
-  const [provider, setProvider] = useState('openrouter');
+  const [configurationMode, setConfigurationMode] = useState('simple');
+  const [provider, setProvider] = useState('bailian');
   const [apiKeys, setApiKeys] = useState({ openrouter: '', gemini: '', openai: '', bailian: '' });
   const [methodContent, setMethodContent] = useState(SAMPLE_METHOD);
   const [caption, setCaption] = useState('图 1：所提出的多智能体学术图示生成框架总览。');
   const [infographicCategory, setInfographicCategory] = useState('method_framework');
-  const [mainModelName, setMainModelName] = useState(PROVIDERS.openrouter.mainModel);
-  const [imageGenModelName, setImageGenModelName] = useState(PROVIDERS.openrouter.imageModel);
+  const [mainModelName, setMainModelName] = useState(PROVIDERS.bailian.mainModel);
+  const [imageGenModelName, setImageGenModelName] = useState(PROVIDERS.bailian.imageModel);
   const [pipelineMode, setPipelineMode] = useState('demo_planner_critic');
   const [retrievalSetting, setRetrievalSetting] = useState('none');
   const [aspectRatio, setAspectRatio] = useState('16:9');
@@ -126,6 +127,7 @@ function App() {
   const selectedKey = apiKeys[providerConfig.keyName] || '';
   const apiBaseNormalized = apiBase.replace(/\/$/, '');
   const selectedInfographicCategory = INFOGRAPHIC_CATEGORIES.find(([id]) => id === infographicCategory) || INFOGRAPHIC_CATEGORIES[0];
+  const isAdvancedMode = configurationMode === 'advanced';
 
   useEffect(() => {
     let cancelled = false;
@@ -167,9 +169,9 @@ function App() {
 
   const canSubmit = useMemo(() => {
     const hasKey = selectedKey.trim();
-    const canMock = mock && health?.mock_enabled;
+    const canMock = isAdvancedMode && mock && health?.mock_enabled;
     return (hasKey || canMock) && methodContent.trim().length >= 20 && caption.trim().length >= 3 && !isSubmitting;
-  }, [selectedKey, methodContent, caption, isSubmitting, mock, health]);
+  }, [selectedKey, methodContent, caption, isSubmitting, mock, health, isAdvancedMode]);
 
   async function submitJob(event) {
     event.preventDefault();
@@ -177,21 +179,29 @@ function App() {
     setIsSubmitting(true);
     setJob(null);
     try {
+      const scopedApiKeys = {
+        openrouter: '',
+        gemini: '',
+        openai: '',
+        bailian: '',
+        [providerConfig.keyName]: selectedKey,
+      };
       const payload = {
+        configurationMode,
         provider,
-        apiKeys,
+        apiKeys: scopedApiKeys,
         taskName: 'diagram',
         methodContent,
         caption,
         infographicCategory: selectedInfographicCategory[1],
-        mainModelName,
-        imageGenModelName,
-        pipelineMode,
-        retrievalSetting,
-        aspectRatio,
-        numCandidates: Number(numCandidates),
-        maxCriticRounds: Number(maxCriticRounds),
-        mock,
+        mainModelName: isAdvancedMode ? mainModelName : providerConfig.mainModel,
+        imageGenModelName: isAdvancedMode ? imageGenModelName : providerConfig.imageModel,
+        pipelineMode: isAdvancedMode ? pipelineMode : 'demo_planner_critic',
+        retrievalSetting: isAdvancedMode ? retrievalSetting : 'none',
+        aspectRatio: isAdvancedMode ? aspectRatio : '16:9',
+        numCandidates: isAdvancedMode ? Number(numCandidates) : 1,
+        maxCriticRounds: isAdvancedMode ? Number(maxCriticRounds) : 1,
+        mock: isAdvancedMode ? mock : false,
       };
       const created = await createJobRequest(apiBaseNormalized, health, payload);
       setCurrentJobId(created.id);
@@ -246,12 +256,36 @@ function App() {
             <Settings2 size={20} />
             <div>
               <h2>生成设置</h2>
-              <p>选择模型接口、生成流程和图像渲染参数。</p>
+              <p>{isAdvancedMode ? '选择模型接口、生成流程和图像渲染参数。' : '选择模型平台并粘贴 API 密钥。'}</p>
             </div>
           </div>
 
           <div className="field">
-            <span>模型接口</span>
+            <span>使用模式</span>
+            <div className="mode-switch" role="tablist" aria-label="使用模式">
+              <button
+                type="button"
+                className={!isAdvancedMode ? 'active' : ''}
+                onClick={() => setConfigurationMode('simple')}
+              >
+                <Sparkles size={16} />
+                <span>普通模式</span>
+                <small>平台 + Key</small>
+              </button>
+              <button
+                type="button"
+                className={isAdvancedMode ? 'active' : ''}
+                onClick={() => setConfigurationMode('advanced')}
+              >
+                <Settings2 size={16} />
+                <span>专业模式</span>
+                <small>模型与流程</small>
+              </button>
+            </div>
+          </div>
+
+          <div className="field">
+            <span>{isAdvancedMode ? '模型接口' : '模型平台'}</span>
             <div className="segmented">
               {Object.entries(PROVIDERS).map(([id, item]) => (
                 <button
@@ -285,56 +319,67 @@ function App() {
             <ApiKeyGuide providerConfig={providerConfig} />
           </details>
 
-          <label className="field">
-            <span>后端地址</span>
-            <input value={apiBase} onChange={(event) => setApiBase(event.target.value)} placeholder="留空则使用同源后端" />
-          </label>
+          {!isAdvancedMode ? (
+            <div className="default-summary" aria-label="默认生成配置">
+              <span>{providerConfig.mainModel}</span>
+              <span>{providerConfig.imageModel}</span>
+              <span>规划器 + 评审器</span>
+              <span>16:9</span>
+            </div>
+          ) : (
+            <>
+              <label className="field">
+                <span>后端地址</span>
+                <input value={apiBase} onChange={(event) => setApiBase(event.target.value)} placeholder="留空则使用同源后端" />
+              </label>
 
-          <div className="settings-grid">
-            <Select label="生成流程" value={pipelineMode} onChange={setPipelineMode} options={[
-              ['demo_planner_critic', '规划器 + 评审器'],
-              ['demo_full', '完整流程'],
-              ['vanilla', '基础生成'],
-            ]} />
-            <Select label="检索设置" value={retrievalSetting} onChange={setRetrievalSetting} options={[
-              ['none', '不使用检索'],
-              ['auto', '自动检索'],
-              ['random', '随机参考'],
-              ['manual', '手动参考'],
-            ]} />
-            <Select label="画面比例" value={aspectRatio} onChange={setAspectRatio} options={[
-              ['16:9', '16:9'],
-              ['21:9', '21:9'],
-              ['3:2', '3:2'],
-              ['1:1', '1:1'],
-            ]} />
-            <label className="field compact">
-              <span>候选图数量</span>
-              <input type="number" min="1" max="4" value={numCandidates} onChange={(event) => setNumCandidates(event.target.value)} />
-            </label>
-            <label className="field compact">
-              <span>评审轮数</span>
-              <input type="number" min="0" max="3" value={maxCriticRounds} onChange={(event) => setMaxCriticRounds(event.target.value)} />
-            </label>
-          </div>
+              <div className="settings-grid">
+                <Select label="生成流程" value={pipelineMode} onChange={setPipelineMode} options={[
+                  ['demo_planner_critic', '规划器 + 评审器'],
+                  ['demo_full', '完整流程'],
+                  ['vanilla', '基础生成'],
+                ]} />
+                <Select label="检索设置" value={retrievalSetting} onChange={setRetrievalSetting} options={[
+                  ['none', '不使用检索'],
+                  ['auto', '自动检索'],
+                  ['random', '随机参考'],
+                  ['manual', '手动参考'],
+                ]} />
+                <Select label="画面比例" value={aspectRatio} onChange={setAspectRatio} options={[
+                  ['16:9', '16:9'],
+                  ['21:9', '21:9'],
+                  ['3:2', '3:2'],
+                  ['1:1', '1:1'],
+                ]} />
+                <label className="field compact">
+                  <span>候选图数量</span>
+                  <input type="number" min="1" max="4" value={numCandidates} onChange={(event) => setNumCandidates(event.target.value)} />
+                </label>
+                <label className="field compact">
+                  <span>评审轮数</span>
+                  <input type="number" min="0" max="3" value={maxCriticRounds} onChange={(event) => setMaxCriticRounds(event.target.value)} />
+                </label>
+              </div>
 
-          <div className="model-grid">
-            <label className="field">
-              <span>主模型名称</span>
-              <input value={mainModelName} onChange={(event) => setMainModelName(event.target.value)} />
-            </label>
-            <label className="field">
-              <span>图像生成模型</span>
-              <input value={imageGenModelName} onChange={(event) => setImageGenModelName(event.target.value)} />
-            </label>
-          </div>
+              <div className="model-grid">
+                <label className="field">
+                  <span>主模型名称</span>
+                  <input value={mainModelName} onChange={(event) => setMainModelName(event.target.value)} />
+                </label>
+                <label className="field">
+                  <span>图像生成模型</span>
+                  <input value={imageGenModelName} onChange={(event) => setImageGenModelName(event.target.value)} />
+                </label>
+              </div>
 
-          {health?.mock_enabled ? (
-            <label className="mock-switch">
-              <input type="checkbox" checked={mock} onChange={(event) => setMock(event.target.checked)} />
-              <span>模拟模式</span>
-            </label>
-          ) : null}
+              {health?.mock_enabled ? (
+                <label className="mock-switch">
+                  <input type="checkbox" checked={mock} onChange={(event) => setMock(event.target.checked)} />
+                  <span>模拟模式</span>
+                </label>
+              ) : null}
+            </>
+          )}
 
           <button className="primary-button" type="submit" disabled={!canSubmit}>
             {isSubmitting ? <Loader2 className="spin" size={18} /> : <Send size={18} />}
@@ -402,6 +447,7 @@ function App() {
           <div className="job-row head">
             <span>时间</span>
             <span>状态</span>
+            <span>模式</span>
             <span>接口</span>
             <span>类别</span>
             <span>模型</span>
@@ -411,6 +457,7 @@ function App() {
             <div className="job-row" key={item.id}>
               <span>{formatDate(item.created_at || item.createdAt)}</span>
               <span><StatusBadge status={item.status} /></span>
+              <span>{formatConfigurationMode(item.configuration_mode)}</span>
               <span>{item.provider}</span>
               <span>{item.infographic_category}</span>
               <span title={`${item.main_model_name} / ${item.image_gen_model_name}`}>{item.main_model_name}</span>
@@ -467,6 +514,7 @@ function JobStatus({ job, apiBase }) {
     <div className="job-detail">
       <div className="status-strip">
         <StatusBadge status={job.status} />
+        <span>{formatConfigurationMode(job.configuration_mode)}</span>
         <span>{job.provider}</span>
         <span>{job.aspect_ratio}</span>
         <span>{job.num_candidates} 张候选图</span>
@@ -523,6 +571,7 @@ async function createJobRequest(apiBase, health, payload) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'createJob',
+        configurationMode: payload.configurationMode,
         provider: payload.provider,
         apiKeys: payload.apiKeys,
         methodContent: payload.methodContent,
@@ -544,6 +593,7 @@ async function createJobRequest(apiBase, health, payload) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       provider: payload.provider,
+      configuration_mode: payload.configurationMode,
       api_keys: payload.apiKeys,
       task_name: payload.taskName,
       method_content: payload.methodContent,
@@ -610,6 +660,7 @@ function normalizeJob(job = {}) {
     id: job.id || job._id,
     status: job.status,
     provider: job.provider,
+    configuration_mode: job.configuration_mode || job.configurationMode || 'advanced',
     method_content: job.method_content || job.methodContent || '',
     caption: job.caption || '',
     infographic_category: job.infographic_category || job.infographicCategory || '方法框架图',
@@ -666,6 +717,10 @@ function formatErrorMessage(message) {
   if (message.includes('Backend is unavailable')) return '后端暂时不可用。';
   if (message.includes('HTTP 503')) return '服务暂时不可用，请稍后重试。';
   return message;
+}
+
+function formatConfigurationMode(mode) {
+  return mode === 'simple' ? '普通模式' : '专业模式';
 }
 
 function formatDate(value) {

@@ -3,6 +3,7 @@
 This MVP turns PaperBanana into a BYOK web app:
 
 - Customers paste their own OpenRouter, Gemini, OpenAI, or Alibaba Bailian API key.
+- The frontend defaults to simple mode: customers choose one provider and paste one API key. Advanced mode exposes model names, pipeline, aspect ratio, candidate count, and backend address.
 - API keys are injected only into the isolated generation subprocess and are not stored in SQLite.
 - Task records, prompts, status, logs, and generated images are stored for product analysis.
 - Admin task listing is protected with `ADMIN_TOKEN`.
@@ -69,7 +70,7 @@ Supported function actions:
 
 Laf database collections:
 
-- `paperbanana_jobs`: task metadata, prompts, infographic category, provider/model choices, status, logs, and image references.
+- `paperbanana_jobs`: task metadata, configuration mode, prompts, infographic category, provider/model choices, status, logs, and image references.
 - `paperbanana_images`: generated image bodies only when object storage is unavailable.
 - `paperbanana_events`: lightweight usage events for later product analytics.
 
@@ -85,7 +86,7 @@ curl -X POST https://sdswgya641.sealoshzh.site/paperbanana-api \
 
 The initializer creates these indexes:
 
-- `paperbanana_jobs`: `createdAt_desc`, `status_updatedAt_desc`, `provider_createdAt_desc`, `infographicCategory_createdAt_desc`.
+- `paperbanana_jobs`: `createdAt_desc`, `status_updatedAt_desc`, `provider_createdAt_desc`, `configurationMode_createdAt_desc`, `infographicCategory_createdAt_desc`.
 - `paperbanana_images`: `job_candidate`, `createdAt_desc`.
 - `paperbanana_events`: `createdAt_desc`, `type_createdAt_desc`, `provider_createdAt_desc`.
 

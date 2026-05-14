@@ -10,6 +10,7 @@ def job_to_response(row: dict[str, Any], include_prompt: bool = True) -> dict[st
     return {
         "id": row["id"],
         "status": row["status"],
+        "configuration_mode": row.get("configuration_mode") or "advanced",
         "provider": row["provider"],
         "task_name": row["task_name"],
         "main_model_name": row["main_model_name"],

@@ -12,6 +12,7 @@ type ApiKeys = {
 
 type CreateJobBody = {
   action: 'createJob'
+  configurationMode?: 'simple' | 'advanced'
   provider: Provider
   apiKeys: ApiKeys
   methodContent: string
@@ -65,7 +66,7 @@ export default async function (ctx: FunctionContext) {
 
   try {
     if (action === 'health') {
-      return ok({ ok: true, runtime: 'laf', version: '0.1.4', bucketName })
+      return ok({ ok: true, runtime: 'laf', version: '0.1.5', bucketName })
     }
     if (action === 'createJob') {
       return await createJob(body as CreateJobBody, ctx)
@@ -101,6 +102,7 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
 
   const now = new Date()
   const jobId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  const configurationMode = cleanConfigurationMode(body.configurationMode)
   const infographicCategory = cleanInfographicCategory(body.infographicCategory)
   const safeNumCandidates = clamp(Number(body.numCandidates || 1), 1, Number(process.env.PAPERBANANA_MAX_CANDIDATES || 3))
   const safeCriticRounds = clamp(Number(body.maxCriticRounds || 1), 0, Number(process.env.PAPERBANANA_MAX_CRITIC_ROUNDS || 2))
@@ -108,6 +110,7 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
   const record = {
     _id: jobId,
     status: 'queued' as JobStatus,
+    configurationMode,
     provider: body.provider,
     methodContent: body.methodContent,
     caption: body.caption,
@@ -133,6 +136,7 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
   await jobs.insertOne(record)
   await recordEvent('job_created', {
     jobId,
+    configurationMode,
     provider: body.provider,
     mainModelName: body.mainModelName,
     imageModelName: body.imageModelName,
@@ -178,6 +182,7 @@ async function initDatabase(body: InitDatabaseBody) {
     createIndex(jobs, 'paperbanana_jobs', { createdAt: -1 }, { name: 'createdAt_desc' }),
     createIndex(jobs, 'paperbanana_jobs', { status: 1, updatedAt: -1 }, { name: 'status_updatedAt_desc' }),
     createIndex(jobs, 'paperbanana_jobs', { provider: 1, createdAt: -1 }, { name: 'provider_createdAt_desc' }),
+    createIndex(jobs, 'paperbanana_jobs', { configurationMode: 1, createdAt: -1 }, { name: 'configurationMode_createdAt_desc' }),
     createIndex(jobs, 'paperbanana_jobs', { infographicCategory: 1, createdAt: -1 }, { name: 'infographicCategory_createdAt_desc' }),
     createIndex(images, 'paperbanana_images', { jobId: 1, candidateId: 1 }, { name: 'job_candidate' }),
     createIndex(images, 'paperbanana_images', { createdAt: -1 }, { name: 'createdAt_desc' }),
@@ -244,6 +249,7 @@ async function runJob(
 
   await recordEvent('job_succeeded', {
     jobId,
+    configurationMode: cleanConfigurationMode(body.configurationMode),
     provider: body.provider,
     mainModelName: body.mainModelName,
     imageModelName: body.imageModelName,
@@ -533,6 +539,7 @@ async function markFailed(jobId: string, error: string) {
   )
   await recordEvent('job_failed', {
     jobId,
+    configurationMode: existing?.configurationMode || 'advanced',
     provider: existing?.provider || '',
     mainModelName: existing?.mainModelName || '',
     imageModelName: existing?.imageModelName || '',
@@ -647,6 +654,10 @@ function cleanInfographicCategory(value?: string) {
   return category.slice(0, 80) || '方法框架图'
 }
 
+function cleanConfigurationMode(value?: string) {
+  return value === 'simple' ? 'simple' : 'advanced'
+}
+
 function selectApiKey(provider: Provider, apiKeys: ApiKeys) {
   if (provider === 'openrouter') return apiKeys?.openrouter?.trim() || ''
   if (provider === 'gemini') return apiKeys?.gemini?.trim() || ''
@@ -664,6 +675,7 @@ async function publicJob(job: any, options: PublicJobOptions) {
   return {
     id: job._id,
     status: job.status,
+    configurationMode: job.configurationMode || 'advanced',
     provider: job.provider,
     methodContent: job.methodContent,
     caption: job.caption,

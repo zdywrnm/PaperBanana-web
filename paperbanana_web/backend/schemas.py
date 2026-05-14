@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 Provider = Literal["openrouter", "gemini", "openai", "bailian"]
+ConfigurationMode = Literal["simple", "advanced"]
 TaskName = Literal["diagram", "plot"]
 PipelineMode = Literal["demo_full", "demo_planner_critic", "vanilla"]
 RetrievalSetting = Literal["auto", "manual", "random", "none"]
@@ -21,6 +22,7 @@ class ApiKeys(BaseModel):
 
 class GenerateJobRequest(BaseModel):
     provider: Provider
+    configuration_mode: ConfigurationMode = "advanced"
     api_keys: ApiKeys = Field(default_factory=ApiKeys)
     task_name: TaskName = "diagram"
     method_content: str = Field(min_length=20, max_length=80000)
@@ -56,6 +58,7 @@ class JobResponse(BaseModel):
     id: str
     status: str
     provider: str
+    configuration_mode: str = "advanced"
     task_name: str
     main_model_name: str
     image_gen_model_name: str

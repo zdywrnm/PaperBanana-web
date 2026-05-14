@@ -49,13 +49,14 @@ def write_mock_images(spec: dict[str, Any], output_dir: Path) -> dict[str, Any]:
         target = output_dir / filename
         caption = spec["caption"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         infographic_category = spec.get("infographic_category", "方法框架图").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        configuration_mode = spec.get("configuration_mode", "advanced")
         provider = spec["provider"]
         target.write_text(
             f"""<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
   <rect width="1280" height="720" fill="#f8fafc"/>
   <rect x="70" y="70" width="1140" height="580" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="3"/>
   <text x="110" y="145" font-family="Inter, Arial, sans-serif" font-size="36" font-weight="700" fill="#111827">PaperBanana Mock Result</text>
-  <text x="110" y="205" font-family="Inter, Arial, sans-serif" font-size="22" fill="#475569">Provider: {provider} · Candidate {idx + 1}</text>
+  <text x="110" y="205" font-family="Inter, Arial, sans-serif" font-size="22" fill="#475569">Provider: {provider} · Mode: {configuration_mode} · Candidate {idx + 1}</text>
   <text x="110" y="250" font-family="Inter, Arial, sans-serif" font-size="22" fill="#475569">Infographic Category: {infographic_category}</text>
   <text x="110" y="285" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="600" fill="#111827">Caption</text>
   <foreignObject x="110" y="310" width="980" height="220">

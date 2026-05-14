@@ -47,6 +47,7 @@ class JobRunner:
         self.store.create_job(
             {
                 "id": job_id,
+                "configuration_mode": request.configuration_mode,
                 "provider": request.provider,
                 "task_name": request.task_name,
                 "main_model_name": request.main_model_name,
@@ -148,6 +149,7 @@ class JobRunner:
     def _spec_from_request(self, request: GenerateJobRequest) -> dict[str, Any]:
         return {
             "provider": request.provider,
+            "configuration_mode": request.configuration_mode,
             "task_name": request.task_name,
             "method_content": request.method_content,
             "caption": request.caption,

@@ -35,6 +35,7 @@ class JobStore:
                 CREATE TABLE IF NOT EXISTS jobs (
                     id TEXT PRIMARY KEY,
                     status TEXT NOT NULL,
+                    configuration_mode TEXT NOT NULL DEFAULT 'advanced',
                     provider TEXT NOT NULL,
                     task_name TEXT NOT NULL,
                     main_model_name TEXT NOT NULL,
@@ -63,8 +64,11 @@ class JobStore:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)")
             columns = {row["name"] for row in conn.execute("PRAGMA table_info(jobs)").fetchall()}
+            if "configuration_mode" not in columns:
+                conn.execute("ALTER TABLE jobs ADD COLUMN configuration_mode TEXT NOT NULL DEFAULT 'advanced'")
             if "infographic_category" not in columns:
                 conn.execute("ALTER TABLE jobs ADD COLUMN infographic_category TEXT NOT NULL DEFAULT '方法框架图'")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_configuration_mode ON jobs(configuration_mode, created_at DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_infographic_category ON jobs(infographic_category, created_at DESC)")
 
     def create_job(self, record: dict[str, Any]) -> None:
