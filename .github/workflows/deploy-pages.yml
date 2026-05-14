@@ -41,7 +41,7 @@ jobs:
         env:
           VITE_BACKEND_MODE: laf
           VITE_API_BASE: https://sdswgya641.sealoshzh.site
-          VITE_BASE_PATH: /PaperBanana-web/
+          VITE_BASE_PATH: /
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
