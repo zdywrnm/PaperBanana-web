@@ -40,9 +40,9 @@ jobs:
         run: npm run build
         env:
           VITE_BACKEND_MODE: gateway
-          VITE_API_BASE: https://api.paperbanana.asia
+          VITE_API_BASE: https://yifbnnzrwmxn.sealoshzh.site
           VITE_AUTH_ENABLED: true
-          VITE_AUTH_BASE: https://api.paperbanana.asia
+          VITE_AUTH_BASE: https://yifbnnzrwmxn.sealoshzh.site
           VITE_BASE_PATH: /
 
       - name: Upload Pages artifact
