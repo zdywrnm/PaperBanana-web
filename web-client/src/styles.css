@@ -300,6 +300,21 @@ button {
   align-items: stretch;
 }
 
+.input-options {
+  display: grid;
+  grid-template-columns: minmax(220px, 340px) minmax(280px, 1fr);
+  gap: 14px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.input-options p {
+  margin: 0 0 2px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .input-copy textarea {
   min-height: 280px;
 }
@@ -599,7 +614,7 @@ figcaption {
 
 .job-row {
   display: grid;
-  grid-template-columns: 120px 120px 110px minmax(220px, 1fr) 120px;
+  grid-template-columns: 120px 120px 110px 120px minmax(220px, 1fr) 120px;
   gap: 10px;
   align-items: center;
   min-height: 48px;
@@ -673,6 +688,7 @@ figcaption {
   }
 
   .two-col,
+  .input-options,
   .settings-grid,
   .admin-controls {
     grid-template-columns: 1fr;

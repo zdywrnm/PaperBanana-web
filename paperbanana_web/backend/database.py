@@ -46,6 +46,7 @@ class JobStore:
                     max_critic_rounds INTEGER NOT NULL,
                     method_content TEXT NOT NULL,
                     caption TEXT NOT NULL,
+                    infographic_category TEXT NOT NULL DEFAULT '方法框架图',
                     prompt_char_count INTEGER NOT NULL,
                     client_ip TEXT,
                     user_agent TEXT,
@@ -61,6 +62,10 @@ class JobStore:
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)")
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(jobs)").fetchall()}
+            if "infographic_category" not in columns:
+                conn.execute("ALTER TABLE jobs ADD COLUMN infographic_category TEXT NOT NULL DEFAULT '方法框架图'")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_infographic_category ON jobs(infographic_category, created_at DESC)")
 
     def create_job(self, record: dict[str, Any]) -> None:
         now = utc_now()

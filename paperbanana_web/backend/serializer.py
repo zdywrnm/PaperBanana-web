@@ -21,6 +21,7 @@ def job_to_response(row: dict[str, Any], include_prompt: bool = True) -> dict[st
         "max_critic_rounds": row["max_critic_rounds"],
         "method_content": row["method_content"] if include_prompt else None,
         "caption": row["caption"] if include_prompt else None,
+        "infographic_category": row.get("infographic_category") or "方法框架图",
         "prompt_char_count": row["prompt_char_count"],
         "result_images": result_images,
         "error": row.get("error"),

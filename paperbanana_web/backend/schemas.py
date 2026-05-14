@@ -25,6 +25,7 @@ class GenerateJobRequest(BaseModel):
     task_name: TaskName = "diagram"
     method_content: str = Field(min_length=20, max_length=80000)
     caption: str = Field(min_length=3, max_length=4000)
+    infographic_category: str = Field(default="方法框架图", min_length=1, max_length=80)
     main_model_name: str = Field(min_length=1, max_length=200)
     image_gen_model_name: str = Field(min_length=1, max_length=200)
     pipeline_mode: PipelineMode = "demo_planner_critic"
@@ -34,7 +35,7 @@ class GenerateJobRequest(BaseModel):
     max_critic_rounds: int = Field(default=1, ge=0, le=5)
     mock: bool = False
 
-    @field_validator("method_content", "caption")
+    @field_validator("method_content", "caption", "infographic_category")
     @classmethod
     def strip_text(cls, value: str) -> str:
         return value.strip()
@@ -65,6 +66,7 @@ class JobResponse(BaseModel):
     max_critic_rounds: int
     method_content: str | None = None
     caption: str | None = None
+    infographic_category: str = "方法框架图"
     prompt_char_count: int
     result_images: list[ResultImage] = Field(default_factory=list)
     error: str | None = None

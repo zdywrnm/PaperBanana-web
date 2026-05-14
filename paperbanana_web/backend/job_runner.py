@@ -58,7 +58,8 @@ class JobRunner:
                 "max_critic_rounds": request.max_critic_rounds,
                 "method_content": request.method_content,
                 "caption": request.caption,
-                "prompt_char_count": len(request.method_content) + len(request.caption),
+                "infographic_category": request.infographic_category,
+                "prompt_char_count": len(request.method_content) + len(request.caption) + len(request.infographic_category),
                 "client_ip": client_ip,
                 "user_agent": user_agent,
             }
@@ -150,6 +151,7 @@ class JobRunner:
             "task_name": request.task_name,
             "method_content": request.method_content,
             "caption": request.caption,
+            "infographic_category": request.infographic_category,
             "main_model_name": request.main_model_name,
             "image_gen_model_name": request.image_gen_model_name,
             "pipeline_mode": request.pipeline_mode,

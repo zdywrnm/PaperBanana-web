@@ -48,6 +48,7 @@ def write_mock_images(spec: dict[str, Any], output_dir: Path) -> dict[str, Any]:
         filename = f"candidate_{idx}.svg"
         target = output_dir / filename
         caption = spec["caption"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        infographic_category = spec.get("infographic_category", "方法框架图").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         provider = spec["provider"]
         target.write_text(
             f"""<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
@@ -55,6 +56,7 @@ def write_mock_images(spec: dict[str, Any], output_dir: Path) -> dict[str, Any]:
   <rect x="70" y="70" width="1140" height="580" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="3"/>
   <text x="110" y="145" font-family="Inter, Arial, sans-serif" font-size="36" font-weight="700" fill="#111827">PaperBanana Mock Result</text>
   <text x="110" y="205" font-family="Inter, Arial, sans-serif" font-size="22" fill="#475569">Provider: {provider} · Candidate {idx + 1}</text>
+  <text x="110" y="250" font-family="Inter, Arial, sans-serif" font-size="22" fill="#475569">Infographic Category: {infographic_category}</text>
   <text x="110" y="285" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="600" fill="#111827">Caption</text>
   <foreignObject x="110" y="310" width="980" height="220">
     <div xmlns="http://www.w3.org/1999/xhtml" style="font: 22px Inter, Arial, sans-serif; color: #334155; line-height: 1.45;">{caption}</div>
@@ -110,13 +112,17 @@ async def run_pipeline(spec: dict[str, Any], output_dir: Path) -> dict[str, Any]
 
     data_list = []
     for idx in range(spec["num_candidates"]):
+        visual_intent = f"{spec['caption']}\n信息图类别：{spec.get('infographic_category', '方法框架图')}"
         data_list.append(
             {
                 "filename": f"web_candidate_{idx}",
                 "caption": spec["caption"],
                 "content": spec["method_content"],
-                "visual_intent": spec["caption"],
-                "additional_info": {"rounded_ratio": spec["aspect_ratio"]},
+                "visual_intent": visual_intent,
+                "additional_info": {
+                    "rounded_ratio": spec["aspect_ratio"],
+                    "infographic_category": spec.get("infographic_category", "方法框架图"),
+                },
                 "max_critic_rounds": spec["max_critic_rounds"],
                 "candidate_id": idx,
             }

@@ -80,6 +80,17 @@ const PROVIDERS = {
 
 const SAMPLE_METHOD = `我们提出一个用于学术图示生成的检索增强多智能体框架。检索器会先从参考库中选择相关图例，规划器再把论文方法部分和目标图注转换为详细的视觉规格。风格智能体会补充适合论文发表的版式与配色建议，生成器据此渲染多张候选图，评审器则迭代检查语义一致性与可读性。`;
 
+const INFOGRAPHIC_CATEGORIES = [
+  ['method_framework', '方法框架图', '突出模块、智能体、输入输出和整体系统结构。'],
+  ['workflow', '流程图', '突出步骤顺序、决策节点、循环和执行路径。'],
+  ['system_architecture', '系统架构图', '突出前后端、数据层、模型接口和服务调用关系。'],
+  ['mechanism', '机制示意图', '突出核心原理、变量关系、因果链路和作用机制。'],
+  ['comparison', '对比图', '突出不同方法、模块、实验设置或方案之间的差异。'],
+  ['timeline', '时间线/路线图', '突出阶段、里程碑、演进过程和计划安排。'],
+  ['data_stat', '数据统计图', '突出指标、趋势、分布、占比或实验结果。'],
+  ['concept_map', '概念关系图', '突出关键词、层级、类别和概念之间的关系。'],
+];
+
 const STATUS_LABELS = {
   queued: '排队中',
   running: '生成中',
@@ -93,6 +104,7 @@ function App() {
   const [apiKeys, setApiKeys] = useState({ openrouter: '', gemini: '', openai: '', bailian: '' });
   const [methodContent, setMethodContent] = useState(SAMPLE_METHOD);
   const [caption, setCaption] = useState('图 1：所提出的多智能体学术图示生成框架总览。');
+  const [infographicCategory, setInfographicCategory] = useState('method_framework');
   const [mainModelName, setMainModelName] = useState(PROVIDERS.openrouter.mainModel);
   const [imageGenModelName, setImageGenModelName] = useState(PROVIDERS.openrouter.imageModel);
   const [pipelineMode, setPipelineMode] = useState('demo_planner_critic');
@@ -113,6 +125,7 @@ function App() {
   const providerConfig = PROVIDERS[provider];
   const selectedKey = apiKeys[providerConfig.keyName] || '';
   const apiBaseNormalized = apiBase.replace(/\/$/, '');
+  const selectedInfographicCategory = INFOGRAPHIC_CATEGORIES.find(([id]) => id === infographicCategory) || INFOGRAPHIC_CATEGORIES[0];
 
   useEffect(() => {
     let cancelled = false;
@@ -170,6 +183,7 @@ function App() {
         taskName: 'diagram',
         methodContent,
         caption,
+        infographicCategory: selectedInfographicCategory[1],
         mainModelName,
         imageGenModelName,
         pipelineMode,
@@ -334,8 +348,18 @@ function App() {
             <FileText size={20} />
             <div>
               <h2>输入内容</h2>
-              <p>粘贴论文方法部分和目标图注。</p>
+              <p>选择信息图类别，再粘贴论文方法部分和目标图注。</p>
             </div>
+          </div>
+
+          <div className="input-options">
+            <Select
+              label="信息图类别"
+              value={infographicCategory}
+              onChange={setInfographicCategory}
+              options={INFOGRAPHIC_CATEGORIES.map(([id, label]) => [id, label])}
+            />
+            <p>{selectedInfographicCategory[2]}</p>
           </div>
 
           <div className="two-col input-copy">
@@ -379,6 +403,7 @@ function App() {
             <span>时间</span>
             <span>状态</span>
             <span>接口</span>
+            <span>类别</span>
             <span>模型</span>
             <span>输入</span>
           </div>
@@ -387,6 +412,7 @@ function App() {
               <span>{formatDate(item.created_at || item.createdAt)}</span>
               <span><StatusBadge status={item.status} /></span>
               <span>{item.provider}</span>
+              <span>{item.infographic_category}</span>
               <span title={`${item.main_model_name} / ${item.image_gen_model_name}`}>{item.main_model_name}</span>
               <span title={item.caption}>{item.prompt_char_count} 字</span>
             </div>
@@ -501,6 +527,7 @@ async function createJobRequest(apiBase, health, payload) {
         apiKeys: payload.apiKeys,
         methodContent: payload.methodContent,
         caption: payload.caption,
+        infographicCategory: payload.infographicCategory,
         mainModelName: payload.mainModelName,
         imageModelName: payload.imageGenModelName,
         pipelineMode: toLafPipeline(payload.pipelineMode),
@@ -521,6 +548,7 @@ async function createJobRequest(apiBase, health, payload) {
       task_name: payload.taskName,
       method_content: payload.methodContent,
       caption: payload.caption,
+      infographic_category: payload.infographicCategory,
       main_model_name: payload.mainModelName,
       image_gen_model_name: payload.imageGenModelName,
       pipeline_mode: payload.pipelineMode,
@@ -584,6 +612,7 @@ function normalizeJob(job = {}) {
     provider: job.provider,
     method_content: job.method_content || job.methodContent || '',
     caption: job.caption || '',
+    infographic_category: job.infographic_category || job.infographicCategory || '方法框架图',
     main_model_name: job.main_model_name || job.mainModelName || '',
     image_gen_model_name: job.image_gen_model_name || job.imageModelName || '',
     pipeline_mode: job.pipeline_mode || job.pipelineMode || '',

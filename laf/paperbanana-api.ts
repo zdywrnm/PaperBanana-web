@@ -16,6 +16,7 @@ type CreateJobBody = {
   apiKeys: ApiKeys
   methodContent: string
   caption: string
+  infographicCategory?: string
   mainModelName: string
   imageModelName: string
   pipelineMode?: 'planner_critic' | 'full' | 'vanilla'
@@ -64,7 +65,7 @@ export default async function (ctx: FunctionContext) {
 
   try {
     if (action === 'health') {
-      return ok({ ok: true, runtime: 'laf', version: '0.1.3', bucketName })
+      return ok({ ok: true, runtime: 'laf', version: '0.1.4', bucketName })
     }
     if (action === 'createJob') {
       return await createJob(body as CreateJobBody, ctx)
@@ -100,6 +101,7 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
 
   const now = new Date()
   const jobId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  const infographicCategory = cleanInfographicCategory(body.infographicCategory)
   const safeNumCandidates = clamp(Number(body.numCandidates || 1), 1, Number(process.env.PAPERBANANA_MAX_CANDIDATES || 3))
   const safeCriticRounds = clamp(Number(body.maxCriticRounds || 1), 0, Number(process.env.PAPERBANANA_MAX_CRITIC_ROUNDS || 2))
 
@@ -109,13 +111,14 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
     provider: body.provider,
     methodContent: body.methodContent,
     caption: body.caption,
+    infographicCategory,
     mainModelName: body.mainModelName,
     imageModelName: body.imageModelName,
     pipelineMode: body.pipelineMode || 'planner_critic',
     aspectRatio: body.aspectRatio || '16:9',
     numCandidates: safeNumCandidates,
     maxCriticRounds: safeCriticRounds,
-    promptCharCount: body.methodContent.length + body.caption.length,
+    promptCharCount: body.methodContent.length + body.caption.length + infographicCategory.length,
     resultImages: [],
     logs: [],
     error: '',
@@ -133,6 +136,7 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
     provider: body.provider,
     mainModelName: body.mainModelName,
     imageModelName: body.imageModelName,
+    infographicCategory,
     pipelineMode: record.pipelineMode,
     aspectRatio: record.aspectRatio,
     numCandidates: safeNumCandidates,
@@ -174,6 +178,7 @@ async function initDatabase(body: InitDatabaseBody) {
     createIndex(jobs, 'paperbanana_jobs', { createdAt: -1 }, { name: 'createdAt_desc' }),
     createIndex(jobs, 'paperbanana_jobs', { status: 1, updatedAt: -1 }, { name: 'status_updatedAt_desc' }),
     createIndex(jobs, 'paperbanana_jobs', { provider: 1, createdAt: -1 }, { name: 'provider_createdAt_desc' }),
+    createIndex(jobs, 'paperbanana_jobs', { infographicCategory: 1, createdAt: -1 }, { name: 'infographicCategory_createdAt_desc' }),
     createIndex(images, 'paperbanana_images', { jobId: 1, candidateId: 1 }, { name: 'job_candidate' }),
     createIndex(images, 'paperbanana_images', { createdAt: -1 }, { name: 'createdAt_desc' }),
     createIndex(events, 'paperbanana_events', { createdAt: -1 }, { name: 'createdAt_desc' }),
@@ -242,14 +247,16 @@ async function runJob(
     provider: body.provider,
     mainModelName: body.mainModelName,
     imageModelName: body.imageModelName,
+    infographicCategory: cleanInfographicCategory(body.infographicCategory),
     numCandidates,
     resultImageCount: results.length,
   })
 }
 
 async function runCandidate(body: CreateJobBody, apiKey: string, maxCriticRounds: number) {
+  const infographicCategory = cleanInfographicCategory(body.infographicCategory)
   if ((body.pipelineMode || 'planner_critic') === 'vanilla') {
-    const prompt = diagramPrompt(body.methodContent, body.caption)
+    const prompt = diagramPrompt(body.methodContent, body.caption, infographicCategory)
     const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, prompt, body.aspectRatio || '16:9')
     return { base64, mimeType: 'image/png', description: prompt }
   }
@@ -259,7 +266,7 @@ async function runCandidate(body: CreateJobBody, apiKey: string, maxCriticRounds
     body.mainModelName,
     apiKey,
     plannerSystemPrompt(),
-    plannerUserPrompt(body.methodContent, body.caption),
+    plannerUserPrompt(body.methodContent, body.caption, infographicCategory),
   )
 
   let description = planner
@@ -269,7 +276,7 @@ async function runCandidate(body: CreateJobBody, apiKey: string, maxCriticRounds
       body.mainModelName,
       apiKey,
       stylistSystemPrompt(),
-      stylistUserPrompt(body.methodContent, body.caption, planner),
+      stylistUserPrompt(body.methodContent, body.caption, infographicCategory, planner),
     )
   }
 
@@ -282,7 +289,7 @@ async function runCandidate(body: CreateJobBody, apiKey: string, maxCriticRounds
       body.mainModelName,
       apiKey,
       criticSystemPrompt(),
-      criticUserPrompt(body.methodContent, body.caption, description),
+      criticUserPrompt(body.methodContent, body.caption, infographicCategory, description),
     )
     if (/no changes needed/i.test(critique)) break
     description = critique
@@ -577,8 +584,8 @@ function plannerSystemPrompt() {
   ].join('\n')
 }
 
-function plannerUserPrompt(method: string, caption: string) {
-  return `Methodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nDetailed description of the target figure:`
+function plannerUserPrompt(method: string, caption: string, infographicCategory: string) {
+  return `Methodology Section:\n${method}\n\nFigure Caption:\n${caption}${infographicCategoryBlock(infographicCategory)}\n\nDetailed description of the target figure:`
 }
 
 function stylistSystemPrompt() {
@@ -589,8 +596,8 @@ function stylistSystemPrompt() {
   ].join('\n')
 }
 
-function stylistUserPrompt(method: string, caption: string, description: string) {
-  return `Initial Description:\n${description}\n\nMethodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nPolished detailed description:`
+function stylistUserPrompt(method: string, caption: string, infographicCategory: string, description: string) {
+  return `Initial Description:\n${description}\n\nMethodology Section:\n${method}\n\nFigure Caption:\n${caption}${infographicCategoryBlock(infographicCategory)}\n\nPolished detailed description:`
 }
 
 function criticSystemPrompt() {
@@ -602,14 +609,19 @@ function criticSystemPrompt() {
   ].join('\n')
 }
 
-function criticUserPrompt(method: string, caption: string, description: string) {
-  return `Current Description:\n${description}\n\nMethodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nCritique or revised description:`
+function criticUserPrompt(method: string, caption: string, infographicCategory: string, description: string) {
+  return `Current Description:\n${description}\n\nMethodology Section:\n${method}\n\nFigure Caption:\n${caption}${infographicCategoryBlock(infographicCategory)}\n\nCritique or revised description:`
 }
 
-function diagramPrompt(method: string, caption: string) {
+function diagramPrompt(method: string, caption: string, infographicCategory: string) {
   return diagramPromptFromDescription(
-    `Create an academic method diagram for this methodology:\n${method}\n\nVisual intent:\n${caption}`,
+    `Create an academic method diagram for this methodology:\n${method}\n\nVisual intent:\n${caption}${infographicCategoryBlock(infographicCategory)}`,
   )
+}
+
+function infographicCategoryBlock(infographicCategory: string) {
+  if (!infographicCategory) return ''
+  return `\n\nInfographic Category:\n${infographicCategory}\nUse this category as a structural layout constraint while preserving the paper semantics.`
 }
 
 function diagramPromptFromDescription(description: string) {
@@ -628,6 +640,11 @@ function validateCreateBody(body: CreateJobBody) {
   if (!body.caption || body.caption.trim().length < 3) throw new Error('caption is required')
   if (!body.mainModelName) throw new Error('mainModelName is required')
   if (!body.imageModelName) throw new Error('imageModelName is required')
+}
+
+function cleanInfographicCategory(value?: string) {
+  const category = String(value || '方法框架图').trim()
+  return category.slice(0, 80) || '方法框架图'
 }
 
 function selectApiKey(provider: Provider, apiKeys: ApiKeys) {
@@ -650,6 +667,7 @@ async function publicJob(job: any, options: PublicJobOptions) {
     provider: job.provider,
     methodContent: job.methodContent,
     caption: job.caption,
+    infographicCategory: job.infographicCategory || '方法框架图',
     mainModelName: job.mainModelName,
     imageModelName: job.imageModelName,
     pipelineMode: job.pipelineMode,
