@@ -11,5 +11,8 @@ web-client/node_modules/
 web-client/dist/
 auth-gateway/node_modules/
 auth-gateway/.env
+desktop/node_modules/
+desktop/release/
+desktop/dist/
 .playwright-cli/
 output/

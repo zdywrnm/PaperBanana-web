@@ -67,6 +67,32 @@ The included GitHub Actions workflow `.github/workflows/deploy-pages.yml` builds
 
 The Laf cloud function must keep CORS enabled because GitHub Pages calls it from a different origin.
 
+## Windows Desktop Client
+
+The `desktop/` project packages PaperBanana as a Windows `.exe` with Electron. It is intentionally a thin desktop shell over the production web app:
+
+- app URL: `https://paperbanana.asia/`
+- desktop source: `desktop/src/main.cjs`
+- Windows installer workflow: `.github/workflows/build-desktop.yml`
+- release artifact: `PaperBanana-Setup-0.1.0.exe`
+
+Local preview:
+
+```bash
+cd desktop
+npm ci
+npm run dev
+```
+
+Push a `desktop-v*` tag to build the Windows installer on GitHub Actions and publish it to GitHub Releases:
+
+```bash
+git tag desktop-v0.1.0
+git push paperbanana-web desktop-v0.1.0
+```
+
+The website header links to the latest GitHub Release as the Windows download entry.
+
 ## Laf Cloud Function Deployment
 
 The Laf backend is a single cloud function:
