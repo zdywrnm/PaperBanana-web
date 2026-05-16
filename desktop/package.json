@@ -1,6 +1,6 @@
 {
   "name": "paperbanana-desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "PaperBanana Windows desktop client.",
   "author": "PaperBanana",
@@ -20,9 +20,11 @@
     },
     "files": [
       "src/**/*",
+      "build/icon.png",
       "package.json"
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",

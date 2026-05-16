@@ -74,7 +74,7 @@ The `desktop/` project packages PaperBanana as a Windows `.exe` with Electron. I
 - app URL: `https://paperbanana.asia/`
 - desktop source: `desktop/src/main.cjs`
 - Windows installer workflow: `.github/workflows/build-desktop.yml`
-- release artifact: `PaperBanana-Setup-0.1.0.exe`
+- release artifact: `PaperBanana-Setup-0.1.1.exe`
 
 Local preview:
 
@@ -87,8 +87,8 @@ npm run dev
 Push a `desktop-v*` tag to build the Windows installer on GitHub Actions and publish it to GitHub Releases:
 
 ```bash
-git tag desktop-v0.1.0
-git push paperbanana-web desktop-v0.1.0
+git tag desktop-v0.1.1
+git push paperbanana-web desktop-v0.1.1
 ```
 
 The website header links to the latest GitHub Release as the Windows download entry.

@@ -1,7 +1,9 @@
+const path = require('node:path');
 const { app, BrowserWindow, Menu, shell } = require('electron');
 
 const APP_URL = process.env.PAPERBANANA_DESKTOP_URL || 'https://paperbanana.asia/';
 const APP_ORIGIN = new URL(APP_URL).origin;
+const WINDOW_ICON = path.join(__dirname, '../build/icon.png');
 const TRUSTED_HOSTS = new Set([
   'paperbanana.asia',
   'www.paperbanana.asia',
@@ -103,6 +105,7 @@ function createMainWindow() {
     minWidth: 1120,
     minHeight: 720,
     title: 'PaperBanana 工作台',
+    icon: WINDOW_ICON,
     backgroundColor: '#f3f5f9',
     autoHideMenuBar: true,
     webPreferences: {

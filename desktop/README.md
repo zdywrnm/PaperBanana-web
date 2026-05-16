@@ -35,7 +35,7 @@ npm run build:win
 产物路径：
 
 ```text
-desktop/release/PaperBanana-Setup-0.1.0.exe
+desktop/release/PaperBanana-Setup-0.1.1.exe
 ```
 
 ## 发布
