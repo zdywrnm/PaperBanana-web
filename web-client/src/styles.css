@@ -78,10 +78,13 @@ button {
 }
 
 .brand-logo {
-  width: auto;
-  height: 56px;
-  border-radius: 8px;
-  object-fit: contain;
+  width: 58px;
+  height: 58px;
+  border: 1px solid rgba(217, 214, 204, 0.8);
+  border-radius: 16px;
+  object-fit: cover;
+  background: var(--surface);
+  box-shadow: 0 10px 26px rgba(55, 46, 31, 0.1);
 }
 
 .brand h1,
@@ -1151,6 +1154,20 @@ figcaption {
   .paper-header,
   .brand {
     align-items: flex-start;
+  }
+
+  .brand {
+    gap: 12px;
+  }
+
+  .brand-logo {
+    width: 54px;
+    height: 54px;
+    border-radius: 15px;
+  }
+
+  .brand h1 {
+    font-size: 25px;
   }
 
   .paper-header {

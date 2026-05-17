@@ -18,9 +18,9 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
-import logoUrl from './assets/logo.jpg';
 import './styles.css';
 
+const logoUrl = '/logo.svg';
 const API_BASE_DEFAULT = import.meta.env.VITE_API_BASE || '';
 const BACKEND_MODE = import.meta.env.VITE_BACKEND_MODE || '';
 const AUTH_REQUIRED = import.meta.env.VITE_AUTH_REQUIRED === 'true';
