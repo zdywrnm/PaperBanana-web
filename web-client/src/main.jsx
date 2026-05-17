@@ -608,7 +608,7 @@ function App() {
           <button type="button" onClick={loadAdminJobs}><RefreshCcw size={17} />刷新</button>
         </div>
         {adminError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(adminError)}</div> : null}
-        <JobTable jobs={adminJobs} showUser />
+        <JobTable jobs={adminJobs} showUser apiBase={apiBaseNormalized} />
       </section>
         </>
       ) : (
@@ -618,6 +618,7 @@ function App() {
           isPending={authSession.isPending}
           jobs={userJobs}
           error={userJobsError}
+          apiBase={apiBaseNormalized}
           onLogin={() => setShowAuthPanel(true)}
           onRefresh={() => loadUserJobs()}
         />
@@ -742,7 +743,7 @@ function AuthUnavailablePanel({ onCancel }) {
   );
 }
 
-function TaskRecordsPanel({ authEnabled, currentUser, isPending, jobs, error, onLogin, onRefresh }) {
+function TaskRecordsPanel({ authEnabled, currentUser, isPending, jobs, error, apiBase, onLogin, onRefresh }) {
   return (
     <section className="user-jobs-panel">
       <div className="section-head">
@@ -781,36 +782,78 @@ function TaskRecordsPanel({ authEnabled, currentUser, isPending, jobs, error, on
             <button type="button" onClick={onRefresh}><RefreshCcw size={17} />刷新</button>
           </div>
           {error ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(error)}</div> : null}
-          <JobTable jobs={jobs} showUser={false} />
+          <JobTable jobs={jobs} showUser={false} apiBase={apiBase} />
         </>
       )}
     </section>
   );
 }
 
-function JobTable({ jobs, showUser }) {
+function JobTable({ jobs, showUser, apiBase }) {
   return (
     <div className="job-table">
-      <div className={`job-row head ${showUser ? 'with-user' : ''}`}>
-        <span>时间</span>
-        <span>状态</span>
-        {showUser ? <span>用户</span> : null}
-        <span>模式</span>
-        <span>接口</span>
-        <span>类别</span>
-        <span>模型</span>
-        <span>输入</span>
-      </div>
+      {!jobs.length ? <div className="job-empty">暂无任务记录</div> : null}
       {jobs.map((item) => (
-        <div className={`job-row ${showUser ? 'with-user' : ''}`} key={item.id}>
-          <span>{formatDate(item.created_at || item.createdAt)}</span>
-          <span><StatusBadge status={item.status} /></span>
-          {showUser ? <span title={item.user_email}>{item.user_email || '匿名'}</span> : null}
-          <span>{formatConfigurationMode(item.configuration_mode)}</span>
-          <span>{item.provider}</span>
-          <span>{item.infographic_category}</span>
-          <span title={`${item.main_model_name} / ${item.image_gen_model_name}`}>{item.main_model_name}</span>
-          <span title={item.caption}>{item.prompt_char_count} 字</span>
+        <div className="job-record-card" key={item.id}>
+          <div className="job-record-topline">
+            <div className="job-record-meta">
+              <span>
+                <strong>时间</strong>
+                {formatDate(item.created_at || item.createdAt)}
+              </span>
+              <span>
+                <strong>状态</strong>
+                <StatusBadge status={item.status} />
+              </span>
+              <span>
+                <strong>模式</strong>
+                {formatConfigurationMode(item.configuration_mode)}
+              </span>
+              <span>
+                <strong>类别</strong>
+                {item.infographic_category || '方法框架图'}
+              </span>
+              {showUser ? (
+                <span>
+                  <strong>用户</strong>
+                  <span title={item.user_email}>{item.user_email || '匿名'}</span>
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="job-models">
+            <div>
+              <strong>主模型</strong>
+              <span title={item.main_model_name}>{item.main_model_name || '未记录'}</span>
+            </div>
+            <div>
+              <strong>图像生成模型</strong>
+              <span title={item.image_gen_model_name}>{item.image_gen_model_name || '未记录'}</span>
+            </div>
+          </div>
+
+          <div className="job-prompts">
+            <div>
+              <strong>论文方法内容</strong>
+              <p>{item.method_content || '未记录'}</p>
+            </div>
+            <div>
+              <strong>目标图注</strong>
+              <p>{item.caption || '未记录'}</p>
+            </div>
+          </div>
+
+          {item.status === 'succeeded' && (item.result_images || []).some((image) => image.url) ? (
+            <div className="job-record-images">
+              {(item.result_images || []).filter((image) => image.url).map((image) => (
+                <figure key={image.filename}>
+                  <img src={resolveImageUrl(apiBase, image.url)} alt={`任务结果图 ${image.candidate_id + 1}`} loading="lazy" />
+                  <figcaption>结果图 {image.candidate_id + 1}</figcaption>
+                </figure>
+              ))}
+            </div>
+          ) : null}
         </div>
       ))}
     </div>
@@ -994,12 +1037,29 @@ async function userJobsRequest(apiBase, health) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'myJobs', limit: 50 }),
     });
-    return { jobs: (data.jobs || []).map(normalizeJob) };
+    const jobs = (data.jobs || []).map(normalizeJob);
+    return { jobs: await hydrateRecordImages(apiBase, health, jobs) };
   }
   if (!shouldUseLaf(apiBase, health)) {
-    return fetchJson(`${apiBase}/api/jobs?scope=mine&limit=50`);
+    const data = await fetchJson(`${apiBase}/api/jobs?scope=mine&limit=50`);
+    const jobs = (data.jobs || []).map(normalizeJob);
+    return { jobs: await hydrateRecordImages(apiBase, health, jobs) };
   }
   throw new Error('任务记录需要先启用登录网关。');
+}
+
+async function hydrateRecordImages(apiBase, health, jobs) {
+  return Promise.all(jobs.map(async (job) => {
+    const hasImageUrl = (job.result_images || []).some((image) => image.url);
+    const hasResult = job.result_image_count > 0 || (job.result_images || []).length > 0;
+    if (job.status !== 'succeeded' || hasImageUrl || !hasResult) return job;
+    try {
+      const detail = await getJobRequest(apiBase, health, job.id);
+      return { ...job, ...detail };
+    } catch {
+      return job;
+    }
+  }));
 }
 
 function shouldUseLaf(apiBase, health) {
@@ -1039,6 +1099,7 @@ function normalizeJob(job = {}) {
     num_candidates: job.num_candidates || job.numCandidates || 0,
     max_critic_rounds: job.max_critic_rounds || job.maxCriticRounds || 0,
     prompt_char_count: job.prompt_char_count || job.promptCharCount || 0,
+    result_image_count: job.result_image_count || job.resultImageCount || 0,
     result_images: (job.result_images || job.resultImages || []).map((image, index) => ({
       filename: image.filename || image.url || `${index}`,
       url: image.url,

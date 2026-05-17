@@ -883,43 +883,125 @@ figcaption {
 
 .job-table {
   display: grid;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  overflow: hidden;
+  gap: 12px;
 }
 
-.job-row {
+.job-empty {
+  min-height: 92px;
   display: grid;
-  grid-template-columns: 120px 110px 90px 100px 120px minmax(200px, 1fr) 100px;
-  gap: 10px;
-  align-items: center;
-  min-height: 48px;
-  padding: 8px 12px;
-  border-top: 1px solid #e2e8f0;
-  font-size: 13px;
-}
-
-.job-row.with-user {
-  grid-template-columns: 120px 110px minmax(160px, 1fr) 90px 100px 120px minmax(180px, 1fr) 100px;
-}
-
-.job-row:first-child {
-  border-top: 0;
-}
-
-.job-row.head {
-  min-height: 38px;
+  place-items: center;
   color: #64748b;
   background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.job-record-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.job-record-topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.job-record-meta,
+.job-models {
+  display: grid;
+  gap: 8px;
+}
+
+.job-record-meta {
+  width: 100%;
+  grid-template-columns: repeat(4, minmax(110px, 1fr));
+}
+
+.job-record-meta > span,
+.job-models > div {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.job-record-meta strong,
+.job-models strong,
+.job-prompts strong {
+  color: #64748b;
   font-size: 12px;
   font-weight: 760;
 }
 
-.job-row span {
+.job-record-meta span,
+.job-models span {
   min-width: 0;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.job-record-meta span span,
+.job-models span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.job-models {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.job-prompts {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.job-prompts > div {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.job-prompts p {
+  max-height: 180px;
+  overflow: auto;
+  margin: 0;
+  padding: 11px 12px;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.job-record-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 320px));
+  gap: 12px;
+}
+
+.job-record-images figure {
+  border-radius: 8px;
+}
+
+.job-record-images img {
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: #f8fafc;
 }
 
 .spin {
@@ -1003,5 +1085,16 @@ figcaption {
 
   .job-row.with-user {
     grid-template-columns: 1fr;
+  }
+
+  .job-record-meta,
+  .job-models,
+  .job-prompts,
+  .job-record-images {
+    grid-template-columns: 1fr;
+  }
+
+  .job-record-images {
+    justify-items: stretch;
   }
 }

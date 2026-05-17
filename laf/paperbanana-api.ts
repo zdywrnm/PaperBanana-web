@@ -40,6 +40,7 @@ type UserJobsBody = {
   gatewayToken?: string
   userId: string
   limit?: number
+  includeImageData?: boolean
 }
 
 type AdminJobsBody = {
@@ -197,7 +198,7 @@ async function userJobs(body: UserJobsBody) {
   if (!userId) return fail('userId is required', 400)
   const limit = clamp(Number(body.limit || 50), 1, 100)
   const list = await jobs.find({ userId }).sort({ createdAt: -1 }).limit(limit).toArray()
-  const publicJobs = await Promise.all(list.map((job: any) => publicJob(job, { includeImageData: false })))
+  const publicJobs = await Promise.all(list.map((job: any) => publicJob(job, { includeImageData: body.includeImageData === true })))
   return ok({ jobs: publicJobs })
 }
 
